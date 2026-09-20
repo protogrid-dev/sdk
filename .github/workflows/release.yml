@@ -1,0 +1,37 @@
+# Trusted publishing (OIDC, no long-lived tokens):
+#   tag typescript-vX.Y.Z -> npm @protogrid/sdk   (configure the trusted publisher on npmjs.com: package settings)
+#   tag python-vX.Y.Z     -> PyPI protogrid-sdk   (configure the trusted publisher on pypi.org: owner protogrid-dev, repo sdk, workflow release.yml)
+name: release
+on:
+  push:
+    tags: ["typescript-v*", "python-v*"]
+jobs:
+  npm:
+    if: startsWith(github.ref_name, 'typescript-v')
+    runs-on: ubuntu-latest
+    permissions: { id-token: write, contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, registry-url: "https://registry.npmjs.org" }
+      - run: npm install -g npm@latest
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm test
+      - name: check tag matches package version
+        run: test "typescript-v$(node -p 'require("./typescript/package.json").version')" = "${{ github.ref_name }}"
+      - run: pnpm --filter @protogrid/sdk run build
+      - run: cd typescript && npm publish --provenance --access public
+  pypi:
+    if: startsWith(github.ref_name, 'python-v')
+    runs-on: ubuntu-latest
+    permissions: { id-token: write, contents: read }
+    defaults: { run: { working-directory: python } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync && uv run pytest -q
+      - name: check tag matches package version
+        run: test "python-v$(uv version --short)" = "${{ github.ref_name }}"
+      - run: uv build
+      - run: uv publish --trusted-publishing always
