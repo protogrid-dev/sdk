@@ -36,6 +36,7 @@
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
     "zod": "^4.6.5"
   },
   "repository": {
