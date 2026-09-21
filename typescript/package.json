@@ -41,12 +41,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/protogrid-dev/protogrid.git",
-    "directory": "sdks/typescript"
+    "url": "git+https://github.com/protogrid-dev/sdk.git",
+    "directory": "typescript"
   },
   "homepage": "https://protogrid.dev",
   "bugs": {
-    "url": "https://github.com/protogrid-dev/protogrid/issues"
+    "url": "https://github.com/protogrid-dev/sdk/issues"
   },
   "keywords": [
     "mcp",

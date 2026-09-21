@@ -17,7 +17,7 @@ dev = ["pytest>=8", "pytest-asyncio>=0.24", "mcp>=1.20", "pydantic-ai>=1.0", "uv
 [project.urls]
 Homepage = "https://protogrid.dev"
 Documentation = "https://docs.protogrid.dev/sdk/python/"
-Repository = "https://github.com/protogrid-dev/protogrid"
+Repository = "https://github.com/protogrid-dev/sdk"
 
 [build-system]
 requires = ["hatchling"]
