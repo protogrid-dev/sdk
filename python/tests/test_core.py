@@ -105,3 +105,18 @@ def test_find_connectable():
     # R2 with stored tokens: the fake returns the R1 block for every server, so secrets must still be present.
     found2 = find_connectable(c, "x", secrets={"ACME_TOKEN": "s"}, token_store=store)
     assert found2 is not None and found2.result["name"] == "a/oauth"
+
+
+def test_api_key_defaults_to_env(monkeypatch):
+    seen: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req.headers.get("authorization", "none"))
+        return httpx.Response(200, json={})
+
+    monkeypatch.setenv("PROTOGRID_API_KEY", "pgk_fromenv")
+    t = httpx.MockTransport(handler)
+    ProtogridClient("http://reg/", transport=t).get_server("a/b")
+    ProtogridClient("http://reg/", api_key="pgk_explicit", transport=t).get_server("a/b")
+    ProtogridClient("http://reg/", api_key="", transport=t).get_server("a/b")
+    assert seen == ["Bearer pgk_fromenv", "Bearer pgk_explicit", "none"]

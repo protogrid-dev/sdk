@@ -89,3 +89,25 @@ describe("client", () => {
     expect(found?.connection.kind).toBe("remote");
   });
 });
+
+describe("api key default", () => {
+  const seen: string[] = [];
+  const fetchSpy = (async (_url: string | URL | Request, init?: RequestInit) => {
+    seen.push((init?.headers as Record<string, string>)?.authorization ?? "none");
+    return new Response("{}", { status: 200 });
+  }) as unknown as typeof fetch;
+
+  it("reads PROTOGRID_API_KEY when no key is passed, and \"\" sends none", async () => {
+    const before = process.env.PROTOGRID_API_KEY;
+    process.env.PROTOGRID_API_KEY = "pgk_fromenv";
+    try {
+      await createClient({ baseUrl: "http://reg", fetch: fetchSpy }).getServer("a/b");
+      await createClient({ baseUrl: "http://reg", fetch: fetchSpy, apiKey: "pgk_explicit" }).getServer("a/b");
+      await createClient({ baseUrl: "http://reg", fetch: fetchSpy, apiKey: "" }).getServer("a/b");
+    } finally {
+      if (before === undefined) delete process.env.PROTOGRID_API_KEY;
+      else process.env.PROTOGRID_API_KEY = before;
+    }
+    expect(seen).toEqual(["Bearer pgk_fromenv", "Bearer pgk_explicit", "none"]);
+  });
+});

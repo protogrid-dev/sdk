@@ -6,7 +6,7 @@
 export type ConnectionClass = "R0" | "R1" | "R2" | "L0" | "unknown";
 export type AuthType = "none" | "api_key" | "oauth2" | "unknown";
 export type RemoteTransport = "streamable-http" | "sse";
-export type ConnectionTarget = "mcpServers" | "vscode" | "cursor" | "claude-code-cli" | "codex-toml" | "gemini" | "goose";
+export type ConnectionTarget = "mcpServers" | "vscode" | "cursor" | "claude-code-cli" | "codex-toml" | "opencode" | "gemini" | "goose";
 export type TrustFlag = "multi-version-spam" | "duplicate-repo" | "no-repository" | "no-connection" | "deprecated" | "unreachable" | "blocked" | "deleted";
 
 /** Reverse-DNS namespace of protogrid.dev under `_meta`. */

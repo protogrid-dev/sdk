@@ -104,7 +104,9 @@ async def open_session(conn: ConnectionResponse, secrets: Secrets | None = None,
         raise ValueError(f"{conn['server']} is only available as a bundle; no transport can be built")
     use_oauth = oauth is not None and conn.get("kind") == "remote" and conn.get("auth_type") in ("oauth2", "unknown")
     _, entry = resolve_entry(conn, secrets, partial=use_oauth)
-    info = Implementation(name=client_name, version="0.1.0")
+    from . import __version__  # at call time: the package __init__ imports this module
+
+    info = Implementation(name=client_name, version=__version__)
 
     if "url" in entry:
         headers = dict(entry.get("headers") or {})

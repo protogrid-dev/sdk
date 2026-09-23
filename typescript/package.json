@@ -1,6 +1,6 @@
 {
   "name": "@protogrid/sdk",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Client for the protogrid MCP registry: find servers by intent, get a connection block, connect with no human in the loop.",
   "license": "MIT",
   "type": "module",

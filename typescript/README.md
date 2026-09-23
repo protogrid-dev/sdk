@@ -14,6 +14,8 @@ await mcp.connect(await createTransport(found!.connection, process.env));
 ```
 
 - `search`, `getServer`, `listTools`, `getConnection` mirror the REST API one to one.
+- No key needed. A free key from https://protogrid.dev/account raises the limits (60 requests per minute,
+  5,000 per day); the client reads `PROTOGRID_API_KEY`, or pass `createClient({ apiKey })`.
 - Connection blocks carry `${NAME}` placeholders; `substituteSecrets` fills them from your own store.
   The registry never sees secret values.
 - `connection_class`: **R0** remote, no auth · **R1** remote, static secret you hold · **R2** remote

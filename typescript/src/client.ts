@@ -16,7 +16,11 @@ export const DEFAULT_BASE_URL = "https://api.protogrid.dev";
 export interface ClientOptions {
   /** Base URL of the registry API (default: the public registry). */
   baseUrl?: string | undefined;
-  /** Optional API key for higher limits (slice 6); sent as `Authorization: Bearer`. */
+  /**
+   * Optional API key for higher limits; sent as `Authorization: Bearer`. Defaults to the
+   * `PROTOGRID_API_KEY` environment variable when running under Node; pass `""` to send none.
+   * Create one at https://protogrid.dev/account.
+   */
   apiKey?: string | undefined;
   fetch?: typeof fetch | undefined;
   /** Request timeout in ms (default 15000). */
@@ -55,8 +59,10 @@ export class ProtogridError extends Error {
 export class ProtogridClient {
   private readonly base: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly apiKey: string | undefined;
   constructor(private readonly opts: ClientOptions = {}) {
     this.base = (opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+    this.apiKey = opts.apiKey ?? (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.PROTOGRID_API_KEY;
     this.fetchImpl = opts.fetch ?? globalThis.fetch;
     if (!this.fetchImpl) throw new Error("no fetch available; pass one in ClientOptions.fetch");
   }
@@ -109,7 +115,7 @@ export class ProtogridClient {
     const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs ?? 15_000);
     try {
       const headers: Record<string, string> = { accept: "application/json" };
-      if (this.opts.apiKey) headers.authorization = `Bearer ${this.opts.apiKey}`;
+      if (this.apiKey) headers.authorization = `Bearer ${this.apiKey}`;
       if (this.opts.userAgent) headers["user-agent"] = this.opts.userAgent;
       const res = await this.fetchImpl(`${this.base}${path}`, { headers, signal: controller.signal });
       const text = await res.text();

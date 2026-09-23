@@ -4,6 +4,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+import os
+
 import httpx
 
 from .types import ConnectionResponse, ConnectionTarget, Descriptor, ListToolsResponse, SearchResponse, ToolEntry
@@ -58,6 +60,9 @@ def _raise_for(res: httpx.Response) -> None:
 class _Base:
     def __init__(self, base_url: str = DEFAULT_BASE_URL, *, api_key: str | None = None, timeout: float = 15.0, user_agent: str | None = None):
         self.base_url = base_url.rstrip("/")
+        # Defaults to PROTOGRID_API_KEY; pass api_key="" to send none. Keys: https://protogrid.dev/account
+        if api_key is None:
+            api_key = os.environ.get("PROTOGRID_API_KEY")
         headers = {"accept": "application/json"}
         if api_key:
             headers["authorization"] = f"Bearer {api_key}"

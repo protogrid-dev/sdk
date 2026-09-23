@@ -9,7 +9,7 @@ from typing import Any, Literal, TypedDict
 
 ConnectionClass = Literal["R0", "R1", "R2", "L0", "unknown"]
 AuthType = Literal["none", "api_key", "oauth2", "unknown"]
-ConnectionTarget = Literal["mcpServers", "vscode", "cursor", "claude-code-cli", "codex-toml", "gemini", "goose"]
+ConnectionTarget = Literal["mcpServers", "vscode", "cursor", "claude-code-cli", "codex-toml", "opencode", "gemini", "goose"]
 TrustFlag = Literal["multi-version-spam", "duplicate-repo", "no-repository", "no-connection", "deprecated", "unreachable", "blocked", "deleted"]
 
 #: Reverse-DNS namespace of protogrid.dev under ``_meta``.

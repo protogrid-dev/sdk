@@ -14,4 +14,4 @@ __all__ = [
     "MissingSecretsError", "placeholders_in", "substitute_secrets",
     "META_NS", "ConnectionClass", "ConnectionResponse", "ConnectionTarget", "Descriptor", "ListToolsResponse", "SearchResponse", "SearchResult", "TrustFlag",
 ]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

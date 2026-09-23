@@ -14,10 +14,11 @@ async with open_session(found.connection, os.environ) as session:   # mcp.Client
 ```
 
 - `ProtogridClient` / `AsyncProtogridClient`: `search`, `get_server`, `list_tools`, `list_all_tools`, `get_connection`.
+- No key needed. A free key from https://protogrid.dev/account raises the limits (60 requests per minute, 5,000 per day); the client reads `PROTOGRID_API_KEY`, or pass `ProtogridClient(api_key=...)`.
 - Connection blocks carry `${NAME}` placeholders; `substitute_secrets` fills them from your own store. The registry never sees secret values.
 - `connection_class`: **R0** remote, no auth · **R1** remote, static secret you hold · **R2** remote OAuth (one consent) · **L0** local package (`allow_local=True`) · `unknown`.
 - R2: `open_session(conn, oauth=OAuthOptions(store, consent))` runs the one-time consent (`loopback_consent` or `manual_consent`) through the official SDK's OAuth provider and keeps tokens in your `TokenStore`; later runs need no human.
 - PydanticAI: `to_pydantic_ai(conn, secrets)` returns an `MCPToolset`. `to_fastmcp_transport` and `to_mcp_servers` are pure formatters.
-- Extras: `protogrid[mcp]` for `open_session`, `protogrid[pydantic-ai]` for the toolset.
+- Install: `pip install protogrid-sdk` (imported as `protogrid`). Extras: `protogrid-sdk[mcp]` for `open_session`, `protogrid-sdk[pydantic-ai]` for the toolset.
 
 Examples: `examples/find_and_call.py` (search → connect → call a tool) and `examples/pydantic_ai_agent.py` (agent with a registry-found toolset, no LLM key needed).
