@@ -13,7 +13,7 @@ const mcp = new Client({ name: "my-agent", version: "1.0.0" });
 await mcp.connect(await createTransport(found!.connection, process.env));
 ```
 
-- `search`, `getServer`, `listTools`, `getConnection` mirror the REST API one to one.
+- `search`, `getServer`, `listTools`, `getConnection` mirror the REST API one to one; `check(url)` / `getCheck(id)` run an on-demand check of any remote MCP server URL (quality and Claude and OpenAI directory readiness).
 - No key needed. A free key from https://protogrid.dev/account raises the limits (60 requests per minute,
   5,000 per day); the client reads `PROTOGRID_API_KEY`, or pass `createClient({ apiKey })`.
 - Connection blocks carry `${NAME}` placeholders; `substituteSecrets` fills them from your own store.

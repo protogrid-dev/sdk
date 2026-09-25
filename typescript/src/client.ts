@@ -1,4 +1,5 @@
 import type {
+  CheckResponse,
   ConnectionClass,
   ConnectionResponse,
   ConnectionTarget,
@@ -12,6 +13,8 @@ import type {
 
 /** The public registry. Point `baseUrl` at `http://localhost:8080` for a self-hosted or local stack. */
 export const DEFAULT_BASE_URL = "https://api.protogrid.dev";
+/** Longest the registry holds a check request open. */
+export const MAX_CHECK_WAIT_S = 25;
 
 export interface ClientOptions {
   /** Base URL of the registry API (default: the public registry). */
@@ -110,26 +113,54 @@ export class ProtogridClient {
     return this.get(`/v1/servers/${encodeURIComponent(name)}/connection?target=${encodeURIComponent(target)}`);
   }
 
-  private async get<T>(path: string): Promise<T> {
+  /**
+   * Checks a remote MCP server URL, listed or not: one credential-free probe (no tool is called),
+   * the quality checks and the readiness for the Claude and OpenAI directories. Waits for the result
+   * up to `waitMs` (default 90 s; 0 returns at once) and returns the check as it stands then, so a
+   * `queued` or `running` answer can be read later with `getCheck(id)`. The same URL within a few
+   * minutes returns the recent check. A refused URL throws `invalid_url`; an exhausted hourly
+   * allowance throws `check_quota_exceeded` with `retryAfterMs`.
+   */
+  async check(url: string, opts: { waitMs?: number } = {}): Promise<CheckResponse> {
+    const deadline = Date.now() + (opts.waitMs ?? 90_000);
+    const waitS = () => Math.max(0, Math.min(MAX_CHECK_WAIT_S, Math.floor((deadline - Date.now()) / 1000)));
+    let c = await this.request<CheckResponse>("POST", `/v1/check?wait=${waitS()}`, { url }, waitS());
+    while ((c.status === "queued" || c.status === "running") && waitS() > 0) c = await this.getCheck(c.id, { waitS: waitS() });
+    return c;
+  }
+
+  /** Reads a check; `waitS` (up to 25) holds the request until it finishes. Results are kept 30 days. */
+  getCheck(id: string, opts: { waitS?: number } = {}): Promise<CheckResponse> {
+    const wait = Math.max(0, Math.min(MAX_CHECK_WAIT_S, opts.waitS ?? 0));
+    return this.request("GET", `/v1/check/${encodeURIComponent(id)}${wait ? `?wait=${wait}` : ""}`, undefined, wait);
+  }
+
+  private get<T>(path: string): Promise<T> {
+    return this.request("GET", path);
+  }
+
+  /** `waitS`: seconds the server may hold the request, added to the timeout. */
+  private async request<T>(method: "GET" | "POST", path: string, body?: unknown, waitS = 0): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs ?? 15_000);
+    const timer = setTimeout(() => controller.abort(), (this.opts.timeoutMs ?? 15_000) + waitS * 1000);
     try {
       const headers: Record<string, string> = { accept: "application/json" };
       if (this.apiKey) headers.authorization = `Bearer ${this.apiKey}`;
       if (this.opts.userAgent) headers["user-agent"] = this.opts.userAgent;
-      const res = await this.fetchImpl(`${this.base}${path}`, { headers, signal: controller.signal });
+      if (body !== undefined) headers["content-type"] = "application/json";
+      const res = await this.fetchImpl(`${this.base}${path}`, { method, headers, signal: controller.signal, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
       const text = await res.text();
-      let body: unknown = null;
+      let parsed: unknown = null;
       try {
-        body = text ? JSON.parse(text) : null;
+        parsed = text ? JSON.parse(text) : null;
       } catch {
-        body = null;
+        parsed = null;
       }
       if (!res.ok) {
         const ra = res.headers.get("retry-after");
-        throw new ProtogridError(res.status, (body as ErrorBody | null) ?? { error: `http_${res.status}`, message: text.slice(0, 200) }, ra ? Number(ra) * 1000 : null);
+        throw new ProtogridError(res.status, (parsed as ErrorBody | null) ?? { error: `http_${res.status}`, message: text.slice(0, 200) }, ra ? Number(ra) * 1000 : null);
       }
-      return body as T;
+      return parsed as T;
     } finally {
       clearTimeout(timer);
     }

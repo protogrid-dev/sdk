@@ -120,3 +120,56 @@ def test_api_key_defaults_to_env(monkeypatch):
     ProtogridClient("http://reg/", api_key="pgk_explicit", transport=t).get_server("a/b")
     ProtogridClient("http://reg/", api_key="", transport=t).get_server("a/b")
     assert seen == ["Bearer pgk_fromenv", "Bearer pgk_explicit", "none"]
+
+
+def _check_body(status: str, **extra):
+    return {"id": "abcdefghijklmnopqrstuv", "status": status, "url": "https://mcp.example.com/mcp", "requested_at": "2026-09-25T00:00:00Z", "finished_at": None, "server": None, "page": "https://protogrid.dev/check/abcdefghijklmnopqrstuv", "disclaimer": "", "next_actions": [], **extra}
+
+
+def test_check_posts_then_reads_until_done():
+    seen = []
+    reads = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append((req.method, req.url.path, req.url.params.get("wait"), req.content.decode() if req.content else ""))
+        if req.method == "POST":
+            return httpx.Response(202, json=_check_body("queued"))
+        reads["n"] += 1
+        if reads["n"] < 2:
+            return httpx.Response(200, json=_check_body("running"))
+        return httpx.Response(200, json=_check_body("done", result={"url": "https://mcp.example.com/mcp", "readiness": []}))
+
+    with ProtogridClient("http://r.test", api_key="", transport=httpx.MockTransport(handler)) as c:
+        out = c.check("https://mcp.example.com/mcp")
+    assert out["status"] == "done"
+    assert seen[0][:3] == ("POST", "/v1/check", "25")
+    assert json.loads(seen[0][3]) == {"url": "https://mcp.example.com/mcp"}
+    assert seen[1][:2] == ("GET", "/v1/check/abcdefghijklmnopqrstuv")
+    assert len(seen) == 3
+
+
+def test_check_quota_error():
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"error": "check_quota_exceeded", "scope": "you"}, headers={"retry-after": "120"})
+
+    with ProtogridClient("http://r.test", api_key="", transport=httpx.MockTransport(handler)) as c:
+        with pytest.raises(ProtogridError) as e:
+            c.check("https://mcp.example.com/mcp", wait=0)
+    assert e.value.code == "check_quota_exceeded"
+    assert e.value.retry_after == 120.0
+
+
+def test_async_check_returns_at_once_with_wait_zero():
+    import asyncio
+
+    from protogrid import AsyncProtogridClient
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.url.params.get("wait") == "0"
+        return httpx.Response(202, json=_check_body("queued"))
+
+    async def run():
+        async with AsyncProtogridClient("http://r.test", api_key="", transport=httpx.MockTransport(handler)) as c:
+            return await c.check("https://mcp.example.com/mcp", wait=0)
+
+    assert asyncio.run(run())["status"] == "queued"

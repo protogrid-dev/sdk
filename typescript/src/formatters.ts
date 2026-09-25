@@ -1,5 +1,5 @@
 /**
- * Pure formatters descriptor → framework object (design rule §4). No framework is imported;
+ * Pure formatters descriptor → framework object (a design rule of the SDK). No framework is imported;
  * the shapes are the frameworks' documented config types.
  */
 import { resolveEntry, type Secrets } from "./connect.js";

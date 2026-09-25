@@ -1,6 +1,6 @@
 /**
  * Wire types of the protogrid REST API / MCP server. Hand-written to match the platform's
- * descriptor contract (DESIGN §5/§7/§8); the SDK carries no server-specific knowledge.
+ * descriptor contract (see the descriptor docs); the SDK carries no server-specific knowledge.
  */
 
 export type ConnectionClass = "R0" | "R1" | "R2" | "L0" | "unknown";
@@ -29,6 +29,10 @@ export interface SearchResult {
   categories: string[];
   trust_score: number | null;
   trust_flags: TrustFlag[];
+  /** Quality score 0-100 (null when too few checks apply). */
+  quality_score?: number | null;
+  /** Plain-language label: strong, good, needs work, poor, new, not scored. Describes observed signals; not an audit. */
+  quality_label?: "strong" | "good" | "needs work" | "poor" | "new" | "not scored" | "blocked";
   tool_count: number;
   score: number;
   matched_tools: { name: string; description: string }[];
@@ -118,6 +122,8 @@ export interface Identity {
   aliases: string[];
   alias_count: number;
   repository_key: string | null;
+  /** Someone proved control of the namespace (GitHub login or DNS TXT); says how and since when, never who. Not an audit. */
+  owner?: { verified: boolean; method: "github" | "dns" | null; since: string | null };
 }
 
 /** The official `server.json` object as published; typed loosely on purpose. */
@@ -188,4 +194,102 @@ export interface ErrorBody {
   server?: string;
   next_actions?: NextAction[];
   [k: string]: unknown;
+}
+
+/** On-demand checks (`POST /v1/check`): one credential-free probe of a remote MCP server URL. */
+export type CheckStatus = "queued" | "running" | "done" | "failed";
+export type ReadinessStatus = "pass" | "warn" | "fail" | "na" | "unknown" | "manual";
+
+export interface ReadinessItem {
+  id: string;
+  directory: "claude" | "openai";
+  title: string;
+  level: "must" | "should";
+  /** `heuristic` items only ask for a review; `manual` ones nobody can see from outside. */
+  kind: "auto" | "heuristic" | "manual";
+  /** The directory documentation page the requirement comes from. */
+  source: string;
+  status: ReadinessStatus;
+  detail: string;
+}
+
+export interface DirectoryReadiness {
+  directory: "claude" | "openai";
+  name: string;
+  checked_on: string;
+  docs: string;
+  items: ReadinessItem[];
+  summary: { blockers: number; warnings: number; review: number; unknown: number; manual: number };
+}
+
+export interface QualityCheck {
+  id: string;
+  category: "protocol" | "auth" | "hygiene" | "stability";
+  status: "pass" | "warn" | "fail" | "na";
+  detail: string;
+}
+
+export interface CheckResult {
+  checked_at: string;
+  url: string;
+  /** Catalog server whose remote has this URL. */
+  server: string | null;
+  probe: {
+    outcome: "ok" | "auth_required" | "unreachable" | "timeout" | "protocol_error" | "blocked";
+    http_status: number | null;
+    duration_ms: number;
+    latency_ms: number | null;
+    protocol: { era: "modern" | "legacy" | "legacy-sse" | null; versions: string[]; stateless: boolean | null };
+    list_ttl_ms: number | null;
+    auth: {
+      type: AuthType;
+      www_authenticate: string | null;
+      resource_metadata_url: string | null;
+      resource: string | null;
+      authorization_servers: string[];
+      authorization_server_metadata_url: string | null;
+      issuer: string | null;
+      scopes: string[];
+      code_challenge_methods: string[];
+      grant_types: string[];
+      token_endpoint_auth_methods: string[];
+      cimd_supported: boolean;
+      dcr_supported: boolean;
+    };
+    server_info: { name: string | null; version: string | null };
+    instructions: string | null;
+    tools: { name: string; title: string | null; description: string | null; annotations: Record<string, boolean | string> | null }[] | null;
+    tools_truncated: boolean;
+    tools_omitted: number;
+    redirects: { from: string; to: string; status: number }[];
+    dns: { ipv4: boolean; ipv6: boolean } | null;
+    error: string | null;
+  };
+  quality: {
+    score: number | null;
+    /** good, needs work, poor or not scored: one probe has no history and no trust score. */
+    label: string;
+    components: Record<string, number | null>;
+    checks: QualityCheck[];
+    drivers: string[];
+    tool_count: number;
+    token_estimate: number | null;
+  };
+  readiness: DirectoryReadiness[];
+}
+
+export interface CheckResponse {
+  id: string;
+  status: CheckStatus;
+  url: string;
+  requested_at: string;
+  finished_at: string | null;
+  server: string | null;
+  /** Shareable result page on the portal. */
+  page: string;
+  /** Present once `status` is `done`. */
+  result?: CheckResult;
+  error?: string;
+  disclaimer: string;
+  next_actions: NextAction[];
 }

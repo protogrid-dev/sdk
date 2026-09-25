@@ -111,3 +111,43 @@ describe("api key default", () => {
     expect(seen).toEqual(["Bearer pgk_fromenv", "Bearer pgk_explicit", "none"]);
   });
 });
+
+describe("check (on-demand checks)", () => {
+  const pending = (status: "queued" | "running") => ({ id: "abcdefghijklmnopqrstuv", status, url: "https://mcp.example.com/mcp", requested_at: "2026-09-25T00:00:00Z", finished_at: null, server: null, page: "https://protogrid.dev/check/abcdefghijklmnopqrstuv", disclaimer: "", next_actions: [] });
+
+  it("posts the URL, then reads the check until it is done", async () => {
+    const seen: string[] = [];
+    let reads = 0;
+    const f = (async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      seen.push(`${init?.method} ${u.replace("http://r.test", "")} ${init?.body ?? ""}`);
+      if (init?.method === "POST") return new Response(JSON.stringify(pending("queued")), { status: 202 });
+      reads++;
+      const body = reads < 2 ? pending("running") : { ...pending("running"), status: "done", finished_at: "2026-09-25T00:00:05Z", result: { url: "https://mcp.example.com/mcp", readiness: [] } };
+      return new Response(JSON.stringify(body), { status: 200 });
+    }) as typeof fetch;
+    const c = await createClient({ baseUrl: "http://r.test", fetch: f, apiKey: "" }).check("https://mcp.example.com/mcp");
+    expect(c.status).toBe("done");
+    expect(c.result?.url).toBe("https://mcp.example.com/mcp");
+    expect(seen[0]).toMatch(/^POST \/v1\/check\?wait=25 \{"url":"https:\/\/mcp\.example\.com\/mcp"\}$/);
+    expect(seen[1]).toMatch(/^GET \/v1\/check\/abcdefghijklmnopqrstuv\?wait=\d+ $/);
+    expect(seen).toHaveLength(3);
+  });
+
+  it("returns at once with waitMs 0", async () => {
+    const f = (async (url: string | URL | Request) => {
+      expect(String(url)).toContain("/v1/check?wait=0");
+      return new Response(JSON.stringify(pending("queued")), { status: 202 });
+    }) as typeof fetch;
+    expect((await createClient({ baseUrl: "http://r.test", fetch: f, apiKey: "" }).check("https://mcp.example.com/mcp", { waitMs: 0 })).status).toBe("queued");
+  });
+
+  it("surfaces refusals and quota with their codes", async () => {
+    const f = (async () =>
+      new Response(JSON.stringify({ error: "check_quota_exceeded", scope: "you", message: "You ran 5 checks this hour." }), { status: 429, headers: { "retry-after": "120" } })) as typeof fetch;
+    const err = await createClient({ baseUrl: "http://r.test", fetch: f, apiKey: "" }).check("https://mcp.example.com/mcp").catch((e) => e);
+    expect(err).toBeInstanceOf(ProtogridError);
+    expect(err.code).toBe("check_quota_exceeded");
+    expect(err.retryAfterMs).toBe(120_000);
+  });
+});

@@ -28,7 +28,13 @@ class MatchedTool(TypedDict):
     description: str
 
 
-class SearchResult(TypedDict):
+class _SearchResultOptional(TypedDict, total=False):
+    # Present from registries that compute quality (protogrid, 2026-09-24 on).
+    quality_score: int | None
+    quality_label: str  # strong, good, needs work, poor, new, not scored
+
+
+class SearchResult(_SearchResultOptional):
     name: str
     title: str | None
     description: str
@@ -109,3 +115,62 @@ class ListToolsResponse(TypedDict):
 
 Descriptor = dict[str, Any]
 """``{"server": <official server.json>, "_meta": {...}, "next_actions": [...]}``."""
+
+
+# --- On-demand checks (POST /v1/check): one credential-free probe of a remote MCP server URL ---
+
+CheckStatus = Literal["queued", "running", "done", "failed"]
+ReadinessStatus = Literal["pass", "warn", "fail", "na", "unknown", "manual"]
+
+
+class ReadinessItem(TypedDict):
+    id: str
+    directory: Literal["claude", "openai"]
+    title: str
+    level: Literal["must", "should"]
+    #: ``heuristic`` items only ask for a review; ``manual`` ones nobody can see from outside.
+    kind: Literal["auto", "heuristic", "manual"]
+    #: The directory documentation page the requirement comes from.
+    source: str
+    status: ReadinessStatus
+    detail: str
+
+
+class DirectoryReadiness(TypedDict):
+    directory: Literal["claude", "openai"]
+    name: str
+    checked_on: str
+    docs: str
+    items: list[ReadinessItem]
+    summary: dict[str, int]
+
+
+class CheckResult(TypedDict):
+    checked_at: str
+    url: str
+    #: Catalog server whose remote has this URL.
+    server: str | None
+    #: outcome, protocol, a summary of the OAuth metadata, the tools without schemas, redirects.
+    probe: dict[str, Any]
+    #: score, label (good, needs work, poor, not scored), components, checks, drivers.
+    quality: dict[str, Any]
+    readiness: list[DirectoryReadiness]
+
+
+class _CheckResponseOptional(TypedDict, total=False):
+    #: Present once ``status`` is ``done``.
+    result: CheckResult
+    error: str
+
+
+class CheckResponse(_CheckResponseOptional):
+    id: str
+    status: CheckStatus
+    url: str
+    requested_at: str
+    finished_at: str | None
+    server: str | None
+    #: Shareable result page on the portal.
+    page: str
+    disclaimer: str
+    next_actions: list[NextAction]

@@ -5,14 +5,17 @@ from collections.abc import Sequence
 from typing import Any
 
 import os
+import time
 
 import httpx
 
-from .types import ConnectionResponse, ConnectionTarget, Descriptor, ListToolsResponse, SearchResponse, ToolEntry
+from .types import CheckResponse, ConnectionResponse, ConnectionTarget, Descriptor, ListToolsResponse, SearchResponse, ToolEntry
 
 
 #: The public registry. Pass ``base_url="http://localhost:8080"`` for a self-hosted or local stack.
 DEFAULT_BASE_URL = "https://api.protogrid.dev"
+#: Longest the registry holds a check request open, in seconds.
+MAX_CHECK_WAIT_S = 25
 
 
 class ProtogridError(Exception):
@@ -72,6 +75,14 @@ class _Base:
         self._timeout = timeout
 
     @staticmethod
+    def _wait_left(deadline: float) -> int:
+        return max(0, min(MAX_CHECK_WAIT_S, int(deadline - time.monotonic())))
+
+    @staticmethod
+    def _pending(c: CheckResponse) -> bool:
+        return c["status"] in ("queued", "running")
+
+    @staticmethod
     def _server_path(name: str, suffix: str = "") -> str:
         from urllib.parse import quote
 
@@ -126,6 +137,33 @@ class ProtogridClient(_Base):
     def get_connection(self, name: str, target: ConnectionTarget = "mcpServers") -> ConnectionResponse:
         return self._get(self._server_path(name, "/connection"), {"target": target})
 
+    def check(self, url: str, *, wait: float = 90.0) -> CheckResponse:
+        """Checks a remote MCP server URL, listed or not: one credential-free probe (no tool is
+        called), the quality checks and the readiness for the Claude and OpenAI directories.
+
+        Waits for the result up to ``wait`` seconds (0 returns at once) and returns the check as it
+        stands then; read a ``queued`` or ``running`` one later with :meth:`get_check`. The same URL
+        within a few minutes returns the recent check. A refused URL raises ``invalid_url``; an
+        exhausted hourly allowance raises ``check_quota_exceeded`` with ``retry_after``.
+        """
+        deadline = time.monotonic() + wait
+        w = self._wait_left(deadline)
+        res = self._http.post("/v1/check", params={"wait": str(w)}, json={"url": url}, timeout=self._timeout + w)
+        _raise_for(res)
+        c: CheckResponse = res.json()
+        while self._pending(c) and self._wait_left(deadline) > 0:
+            c = self.get_check(c["id"], wait=self._wait_left(deadline))
+        return c
+
+    def get_check(self, id: str, *, wait: int = 0) -> CheckResponse:
+        """Reads a check; ``wait`` (up to 25 s) holds the request until it finishes. Kept 30 days."""
+        from urllib.parse import quote
+
+        w = max(0, min(MAX_CHECK_WAIT_S, wait))
+        res = self._http.get(f"/v1/check/{quote(id, safe='')}", params={"wait": str(w)} if w else None, timeout=self._timeout + w)
+        _raise_for(res)
+        return res.json()
+
 
 class AsyncProtogridClient(_Base):
     """Asynchronous client (same methods, awaitable)."""
@@ -174,3 +212,30 @@ class AsyncProtogridClient(_Base):
 
     async def get_connection(self, name: str, target: ConnectionTarget = "mcpServers") -> ConnectionResponse:
         return await self._get(self._server_path(name, "/connection"), {"target": target})
+
+    async def check(self, url: str, *, wait: float = 90.0) -> CheckResponse:
+        """Checks a remote MCP server URL, listed or not: one credential-free probe (no tool is
+        called), the quality checks and the readiness for the Claude and OpenAI directories.
+
+        Waits for the result up to ``wait`` seconds (0 returns at once) and returns the check as it
+        stands then; read a ``queued`` or ``running`` one later with :meth:`get_check`. The same URL
+        within a few minutes returns the recent check. A refused URL raises ``invalid_url``; an
+        exhausted hourly allowance raises ``check_quota_exceeded`` with ``retry_after``.
+        """
+        deadline = time.monotonic() + wait
+        w = self._wait_left(deadline)
+        res = await self._http.post("/v1/check", params={"wait": str(w)}, json={"url": url}, timeout=self._timeout + w)
+        _raise_for(res)
+        c: CheckResponse = res.json()
+        while self._pending(c) and self._wait_left(deadline) > 0:
+            c = await self.get_check(c["id"], wait=self._wait_left(deadline))
+        return c
+
+    async def get_check(self, id: str, *, wait: int = 0) -> CheckResponse:
+        """Reads a check; ``wait`` (up to 25 s) holds the request until it finishes. Kept 30 days."""
+        from urllib.parse import quote
+
+        w = max(0, min(MAX_CHECK_WAIT_S, wait))
+        res = await self._http.get(f"/v1/check/{quote(id, safe='')}", params={"wait": str(w)} if w else None, timeout=self._timeout + w)
+        _raise_for(res)
+        return res.json()

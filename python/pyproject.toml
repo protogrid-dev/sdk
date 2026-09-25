@@ -1,6 +1,6 @@
 [project]
 name = "protogrid-sdk"
-version = "0.2.0"
+version = "0.3.0"
 description = "Client for the protogrid MCP registry: find servers by intent, get a connection block, connect with no human in the loop."
 readme = "README.md"
 license = "MIT"
