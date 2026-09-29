@@ -1,12 +1,16 @@
 import type {
+  ChangesResponse,
   CheckResponse,
   ConnectionClass,
   ConnectionResponse,
   ConnectionTarget,
+  DependenciesResponse,
   Descriptor,
   ErrorBody,
   ListToolsResponse,
   McpServersConnection,
+  QualityFlag,
+  QualityResponse,
   SearchResponse,
   TrustFlag,
 } from "./types.js";
@@ -43,6 +47,14 @@ export interface SearchParams {
   flags?: TrustFlag[];
   /** Any listed flag excludes a server, e.g. `["multi-version-spam", "duplicate-repo"]`. */
   exclude_flags?: TrustFlag[];
+  /** Minimum quality score 0-100; servers that are not scored are left out. */
+  min_quality?: number;
+  /** Every listed quality flag must be present. */
+  quality_flags?: QualityFlag[];
+  /** Any listed quality flag excludes a server, e.g. `["known-vulns"]`. */
+  exclude_quality_flags?: QualityFlag[];
+  /** `true` keeps only servers whose owner proved control of the namespace (not an audit). */
+  owner_verified?: boolean;
 }
 
 export class ProtogridError extends Error {
@@ -79,6 +91,10 @@ export class ProtogridClient {
     if (params.min_trust != null) q.set("min_trust", String(params.min_trust));
     if (params.flags?.length) q.set("flags", params.flags.join(","));
     if (params.exclude_flags?.length) q.set("exclude_flags", params.exclude_flags.join(","));
+    if (params.min_quality != null) q.set("min_quality", String(params.min_quality));
+    if (params.quality_flags?.length) q.set("quality_flags", params.quality_flags.join(","));
+    if (params.exclude_quality_flags?.length) q.set("exclude_quality_flags", params.exclude_quality_flags.join(","));
+    if (params.owner_verified != null) q.set("owner_verified", String(params.owner_verified));
     return this.get(`/v1/search?${q}`);
   }
 
@@ -106,6 +122,25 @@ export class ProtogridClient {
     return out;
   }
 
+  /** The quality block, the verified owner and the daily score for the last `days` (default 90, up to 400). */
+  getQuality(name: string, opts: { days?: number } = {}): Promise<QualityResponse> {
+    return this.get(`/v1/servers/${encodeURIComponent(name)}/quality${opts.days != null ? `?days=${opts.days}` : ""}`);
+  }
+
+  /** Tool-definition history, newest first; pass `next_before` back as `before` for the next page. */
+  getChanges(name: string, opts: { limit?: number; before?: number } = {}): Promise<ChangesResponse> {
+    const q = new URLSearchParams();
+    if (opts.limit != null) q.set("limit", String(opts.limit));
+    if (opts.before != null) q.set("before", String(opts.before));
+    const qs = q.toString();
+    return this.get(`/v1/servers/${encodeURIComponent(name)}/changes${qs ? `?${qs}` : ""}`);
+  }
+
+  /** npm and PyPI packages of the server with their resolved dependency graphs and known advisories. */
+  getDependencies(name: string): Promise<DependenciesResponse> {
+    return this.get(`/v1/servers/${encodeURIComponent(name)}/dependencies`);
+  }
+
   getConnection(name: string): Promise<McpServersConnection>;
   getConnection(name: string, target: "mcpServers"): Promise<McpServersConnection>;
   getConnection(name: string, target: ConnectionTarget): Promise<ConnectionResponse>;
@@ -118,13 +153,14 @@ export class ProtogridClient {
    * the quality checks and the readiness for the Claude and OpenAI directories. Waits for the result
    * up to `waitMs` (default 90 s; 0 returns at once) and returns the check as it stands then, so a
    * `queued` or `running` answer can be read later with `getCheck(id)`. The same URL within a few
-   * minutes returns the recent check. A refused URL throws `invalid_url`; an exhausted hourly
-   * allowance throws `check_quota_exceeded` with `retryAfterMs`.
+   * minutes returns the recent check, unless `fresh` is set with an API key (for CI right after a deploy;
+   * it counts against the hourly allowance, and anonymous calls ignore it). A refused URL throws
+   * `invalid_url`; an exhausted hourly allowance throws `check_quota_exceeded` with `retryAfterMs`.
    */
-  async check(url: string, opts: { waitMs?: number } = {}): Promise<CheckResponse> {
+  async check(url: string, opts: { waitMs?: number; fresh?: boolean } = {}): Promise<CheckResponse> {
     const deadline = Date.now() + (opts.waitMs ?? 90_000);
     const waitS = () => Math.max(0, Math.min(MAX_CHECK_WAIT_S, Math.floor((deadline - Date.now()) / 1000)));
-    let c = await this.request<CheckResponse>("POST", `/v1/check?wait=${waitS()}`, { url }, waitS());
+    let c = await this.request<CheckResponse>("POST", `/v1/check?wait=${waitS()}`, opts.fresh ? { url, fresh: true } : { url }, waitS());
     while ((c.status === "queued" || c.status === "running") && waitS() > 0) c = await this.getCheck(c.id, { waitS: waitS() });
     return c;
   }

@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { id-token: write, contents: read }
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, registry-url: "https://registry.npmjs.org" }
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, registry-url: "https://registry.npmjs.org" }
       - run: npm install -g npm@latest
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm test
@@ -28,8 +28,8 @@ jobs:
     permissions: { id-token: write, contents: read }
     defaults: { run: { working-directory: python } }
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
       - run: uv sync && uv run pytest -q
       - name: check tag matches package version
         run: test "python-v$(uv version --short)" = "${{ github.ref_name }}"

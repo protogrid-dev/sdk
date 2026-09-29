@@ -76,6 +76,22 @@ describe("client", () => {
     await client.listTools("io.github.acme/acme-mcp", { cursor: "z", limit: 5 });
     expect(calls.at(-1)).toBe("http://reg/v1/servers/io.github.acme%2Facme-mcp/tools?limit=5&cursor=z|Bearer k");
   });
+  it("sends the quality and owner filters", async () => {
+    await client.search({ q: "db", min_quality: 75, quality_flags: ["outdated-mcp-sdk"], exclude_quality_flags: ["known-vulns"], owner_verified: true });
+    expect(calls.at(-1)).toBe("http://reg/v1/search?q=db&min_quality=75&quality_flags=outdated-mcp-sdk&exclude_quality_flags=known-vulns&owner_verified=true|Bearer k");
+    await client.search({ q: "db", owner_verified: false });
+    expect(calls.at(-1)).toBe("http://reg/v1/search?q=db&owner_verified=false|Bearer k");
+  });
+  it("reads quality, changes and dependencies", async () => {
+    await client.getQuality("io.github.acme/acme-mcp", { days: 30 });
+    expect(calls.at(-1)).toBe("http://reg/v1/servers/io.github.acme%2Facme-mcp/quality?days=30|Bearer k");
+    await client.getQuality("io.github.acme/acme-mcp");
+    expect(calls.at(-1)).toBe("http://reg/v1/servers/io.github.acme%2Facme-mcp/quality|Bearer k");
+    await client.getChanges("io.github.acme/acme-mcp", { limit: 10, before: 1234 });
+    expect(calls.at(-1)).toBe("http://reg/v1/servers/io.github.acme%2Facme-mcp/changes?limit=10&before=1234|Bearer k");
+    await client.getDependencies("io.github.acme/acme-mcp");
+    expect(calls.at(-1)).toBe("http://reg/v1/servers/io.github.acme%2Facme-mcp/dependencies|Bearer k");
+  });
   it("maps errors", async () => {
     await expect(client.getServer("nothing")).rejects.toMatchObject({ status: 404, code: "not_found" });
     const e = await client.getServer("limited").catch((x: ProtogridError) => x);
@@ -132,6 +148,18 @@ describe("check (on-demand checks)", () => {
     expect(seen[0]).toMatch(/^POST \/v1\/check\?wait=25 \{"url":"https:\/\/mcp\.example\.com\/mcp"\}$/);
     expect(seen[1]).toMatch(/^GET \/v1\/check\/abcdefghijklmnopqrstuv\?wait=\d+ $/);
     expect(seen).toHaveLength(3);
+  });
+
+  it("asks for a fresh check only when told to", async () => {
+    const bodies: string[] = [];
+    const f = (async (_url: string | URL | Request, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      return new Response(JSON.stringify(pending("queued")), { status: 202 });
+    }) as typeof fetch;
+    const c = createClient({ baseUrl: "http://r.test", fetch: f, apiKey: "k" });
+    await c.check("https://mcp.example.com/mcp", { waitMs: 0, fresh: true });
+    await c.check("https://mcp.example.com/mcp", { waitMs: 0 });
+    expect(bodies).toEqual(['{"url":"https://mcp.example.com/mcp","fresh":true}', '{"url":"https://mcp.example.com/mcp"}']);
   });
 
   it("returns at once with waitMs 0", async () => {

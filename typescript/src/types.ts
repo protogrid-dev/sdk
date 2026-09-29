@@ -7,6 +7,8 @@ export type ConnectionClass = "R0" | "R1" | "R2" | "L0" | "unknown";
 export type AuthType = "none" | "api_key" | "oauth2" | "unknown";
 export type RemoteTransport = "streamable-http" | "sse";
 export type ConnectionTarget = "mcpServers" | "vscode" | "cursor" | "claude-code-cli" | "codex-toml" | "opencode" | "gemini" | "goose";
+/** Raised when a dependency check fails (never on a warning). No flag is not "no vulnerabilities": remote-only servers publish no package. */
+export type QualityFlag = "known-vulns" | "outdated-mcp-sdk";
 export type TrustFlag = "multi-version-spam" | "duplicate-repo" | "no-repository" | "no-connection" | "deprecated" | "unreachable" | "blocked" | "deleted";
 
 /** Reverse-DNS namespace of protogrid.dev under `_meta`. */
@@ -33,6 +35,10 @@ export interface SearchResult {
   quality_score?: number | null;
   /** Plain-language label: strong, good, needs work, poor, new, not scored. Describes observed signals; not an audit. */
   quality_label?: "strong" | "good" | "needs work" | "poor" | "new" | "not scored" | "blocked";
+  /** Quality flags from failing dependency checks. */
+  quality_flags?: QualityFlag[];
+  /** The owner proved control of the namespace (GitHub sign-in or DNS). Not an audit; never changes ranking. */
+  owner_verified?: boolean;
   tool_count: number;
   score: number;
   matched_tools: { name: string; description: string }[];
@@ -117,6 +123,28 @@ export interface Trust {
   disclaimer: string;
 }
 
+export type QualityLabel = "strong" | "good" | "needs work" | "poor" | "new" | "not scored" | "blocked";
+export type QualityCategory = "protocol" | "auth" | "hygiene" | "stability" | "dependencies";
+
+/** The descriptor's quality block: separate from trust, derived from observable signals; not an audit. */
+export interface Quality {
+  score: number | null;
+  label: QualityLabel;
+  components: Record<QualityCategory, number | null> | null;
+  checks: QualityCheck[];
+  /** Non-passing checks: `-id` for failures, `~id` for warnings, worst first. */
+  drivers: string[];
+  flags?: QualityFlag[];
+  tool_count: number | null;
+  /** Rough token cost of loading the whole tool list. */
+  token_estimate: number | null;
+  /** Hash of the current tool set; pin it to notice any change before trusting new definitions. */
+  tools_hash: string | null;
+  tools_changed_at: string | null;
+  computed_at: string | null;
+  disclaimer: string;
+}
+
 export interface Identity {
   canonical_id: string;
   aliases: string[];
@@ -146,6 +174,7 @@ export interface Descriptor {
     [k: `${string}/connectability`]: Connectability;
     [k: `${string}/tools`]: DescriptorTool[];
     [k: `${string}/trust`]: Trust;
+    [k: `${string}/quality`]: Quality;
     [k: `${string}/identity`]: Identity;
   };
   next_actions: NextAction[];
@@ -224,7 +253,7 @@ export interface DirectoryReadiness {
 
 export interface QualityCheck {
   id: string;
-  category: "protocol" | "auth" | "hygiene" | "stability";
+  category: QualityCategory;
   status: "pass" | "warn" | "fail" | "na";
   detail: string;
 }
@@ -272,6 +301,7 @@ export interface CheckResult {
     components: Record<string, number | null>;
     checks: QualityCheck[];
     drivers: string[];
+    flags?: QualityFlag[];
     tool_count: number;
     token_estimate: number | null;
   };
@@ -291,5 +321,75 @@ export interface CheckResponse {
   result?: CheckResult;
   error?: string;
   disclaimer: string;
+  next_actions: NextAction[];
+}
+
+/** `GET /v1/servers/{name}/quality`: the quality block, the verified owner and the daily score. */
+export interface QualityResponse {
+  server: string;
+  quality: Quality;
+  blocked: boolean;
+  owner: { verified: boolean; method: "github" | "dns" | null; since: string | null };
+  history: { day: string; score: number | null }[];
+  next_actions: NextAction[];
+}
+
+export interface ToolChange {
+  tool: string;
+  kind: "added" | "removed" | "changed";
+  observed_at: string;
+  /** Which parts changed: description, inputSchema, outputSchema, annotations, title. */
+  fields: string[];
+  description_before: string | null;
+  description_after: string | null;
+  /** Word overlap of the two descriptions (0-1); low values mean the meaning may have changed. */
+  description_similarity: number | null;
+  before_hash: string | null;
+  after_hash: string | null;
+}
+
+/** `GET /v1/servers/{name}/changes`: tool-definition history, newest first. */
+export interface ChangesResponse {
+  server: string;
+  count: number;
+  changes: ToolChange[];
+  /** Pass as `before` to read the next page; null at the end. */
+  next_before: number | null;
+  next_actions: NextAction[];
+}
+
+export interface DependencyAdvisory {
+  id: string;
+  aliases: string[];
+  /** CRITICAL, HIGH, MODERATE or LOW when rated; null when unrated. */
+  severity: string | null;
+  summary: string | null;
+  package: string;
+  version: string;
+  relation: "self" | "direct" | "indirect";
+  fixed_in: string | null;
+  /** The advisory belongs to the official MCP SDK. */
+  mcp_sdk: boolean;
+  url: string;
+}
+
+export interface DependencyPackage {
+  registry: "npm" | "pypi";
+  name: string;
+  version: string;
+  /** `pending` until the graph is read and matched, `unknown` when the resolver does not know the version. */
+  status: "resolved" | "incomplete" | "pending" | "unknown";
+  dependency_count: number;
+  mcp_sdk: { name: string; version: string; relation: "self" | "direct" | "indirect" } | null;
+  resolved_at: string | null;
+  advisories_checked_at: string | null;
+  advisories: DependencyAdvisory[];
+}
+
+/** `GET /v1/servers/{name}/dependencies`: npm and PyPI packages, their resolved graphs and known advisories. */
+export interface DependenciesResponse {
+  server: string;
+  packages: DependencyPackage[];
+  attribution: string;
   next_actions: NextAction[];
 }

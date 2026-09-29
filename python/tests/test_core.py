@@ -173,3 +173,55 @@ def test_async_check_returns_at_once_with_wait_zero():
             return await c.check("https://mcp.example.com/mcp", wait=0)
 
     assert asyncio.run(run())["status"] == "queued"
+
+
+def test_search_quality_and_owner_filters_and_read_methods():
+    seen = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(str(req.url))
+        return httpx.Response(200, json={})
+
+    c = ProtogridClient("http://reg", api_key="k", transport=httpx.MockTransport(handler))
+    c.search("db", min_quality=75, quality_flags=["outdated-mcp-sdk"], exclude_quality_flags=["known-vulns"], owner_verified=True)
+    assert seen[-1] == "http://reg/v1/search?q=db&min_quality=75&quality_flags=outdated-mcp-sdk&exclude_quality_flags=known-vulns&owner_verified=true"
+    c.search("db", owner_verified=False)
+    assert seen[-1] == "http://reg/v1/search?q=db&owner_verified=false"
+    c.get_quality("io.github.acme/acme-mcp", days=30)
+    assert seen[-1] == "http://reg/v1/servers/io.github.acme%2Facme-mcp/quality?days=30"
+    c.get_quality("io.github.acme/acme-mcp")
+    assert seen[-1] == "http://reg/v1/servers/io.github.acme%2Facme-mcp/quality"
+    c.get_changes("io.github.acme/acme-mcp", limit=10, before=1234)
+    assert seen[-1] == "http://reg/v1/servers/io.github.acme%2Facme-mcp/changes?limit=10&before=1234"
+    c.get_dependencies("io.github.acme/acme-mcp")
+    assert seen[-1] == "http://reg/v1/servers/io.github.acme%2Facme-mcp/dependencies"
+
+
+def test_fresh_check_only_when_asked_sync_and_async():
+    import asyncio
+
+    from protogrid import AsyncProtogridClient
+
+    bodies = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "POST":
+            bodies.append(json.loads(req.content.decode()))
+            return httpx.Response(202, json=_check_body("queued"))
+        return httpx.Response(200, json={"server": "x", "packages": [], "attribution": "", "next_actions": []})
+
+    with ProtogridClient("http://r.test", api_key="k", transport=httpx.MockTransport(handler)) as c:
+        c.check("https://mcp.example.com/mcp", wait=0, fresh=True)
+        c.check("https://mcp.example.com/mcp", wait=0)
+
+    async def run():
+        async with AsyncProtogridClient("http://r.test", api_key="k", transport=httpx.MockTransport(handler)) as a:
+            await a.check("https://mcp.example.com/mcp", wait=0, fresh=True)
+            await a.get_dependencies("x")
+
+    asyncio.run(run())
+    assert bodies[:3] == [
+        {"url": "https://mcp.example.com/mcp", "fresh": True},
+        {"url": "https://mcp.example.com/mcp"},
+        {"url": "https://mcp.example.com/mcp", "fresh": True},
+    ]

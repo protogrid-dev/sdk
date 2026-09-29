@@ -10,6 +10,9 @@ from typing import Any, Literal, TypedDict
 ConnectionClass = Literal["R0", "R1", "R2", "L0", "unknown"]
 AuthType = Literal["none", "api_key", "oauth2", "unknown"]
 ConnectionTarget = Literal["mcpServers", "vscode", "cursor", "claude-code-cli", "codex-toml", "opencode", "gemini", "goose"]
+#: Raised when a dependency check fails (never on a warning). No flag is not "no vulnerabilities":
+#: remote-only servers publish no package.
+QualityFlag = Literal["known-vulns", "outdated-mcp-sdk"]
 TrustFlag = Literal["multi-version-spam", "duplicate-repo", "no-repository", "no-connection", "deprecated", "unreachable", "blocked", "deleted"]
 
 #: Reverse-DNS namespace of protogrid.dev under ``_meta``.
@@ -32,6 +35,9 @@ class _SearchResultOptional(TypedDict, total=False):
     # Present from registries that compute quality (protogrid, 2026-09-24 on).
     quality_score: int | None
     quality_label: str  # strong, good, needs work, poor, new, not scored
+    # Quality flags from failing dependency checks, and a verified owner (not an audit; never ranking).
+    quality_flags: list[QualityFlag]
+    owner_verified: bool
 
 
 class SearchResult(_SearchResultOptional):
@@ -173,4 +179,111 @@ class CheckResponse(_CheckResponseOptional):
     #: Shareable result page on the portal.
     page: str
     disclaimer: str
+    next_actions: list[NextAction]
+
+
+class QualityCheck(TypedDict):
+    id: str
+    category: Literal["protocol", "auth", "hygiene", "stability", "dependencies"]
+    status: Literal["pass", "warn", "fail", "na"]
+    detail: str
+
+
+class _QualityOptional(TypedDict, total=False):
+    flags: list[QualityFlag]
+
+
+class Quality(_QualityOptional):
+    """The descriptor's quality block (``_meta["dev.protogrid/quality"]``): observed signals, not an audit."""
+
+    score: int | None
+    label: str
+    components: dict[str, int | None] | None
+    checks: list[QualityCheck]
+    #: Non-passing checks: ``-id`` for failures, ``~id`` for warnings, worst first.
+    drivers: list[str]
+    tool_count: int | None
+    token_estimate: int | None
+    #: Hash of the current tool set; pin it to notice any change before trusting new definitions.
+    tools_hash: str | None
+    tools_changed_at: str | None
+    computed_at: str | None
+    disclaimer: str
+
+
+class Owner(TypedDict):
+    verified: bool
+    method: Literal["github", "dns"] | None
+    since: str | None
+
+
+class QualityDay(TypedDict):
+    day: str
+    score: int | None
+
+
+class QualityResponse(TypedDict):
+    server: str
+    quality: Quality
+    blocked: bool
+    owner: Owner
+    history: list[QualityDay]
+    next_actions: list[NextAction]
+
+
+class ToolChange(TypedDict):
+    tool: str
+    kind: Literal["added", "removed", "changed"]
+    observed_at: str
+    #: Which parts changed: description, inputSchema, outputSchema, annotations, title.
+    fields: list[str]
+    description_before: str | None
+    description_after: str | None
+    #: Word overlap of the two descriptions (0-1); low values mean the meaning may have changed.
+    description_similarity: float | None
+    before_hash: str | None
+    after_hash: str | None
+
+
+class ChangesResponse(TypedDict):
+    server: str
+    count: int
+    changes: list[ToolChange]
+    #: Pass as ``before`` to read the next page; None at the end.
+    next_before: int | None
+    next_actions: list[NextAction]
+
+
+class DependencyAdvisory(TypedDict):
+    id: str
+    aliases: list[str]
+    #: CRITICAL, HIGH, MODERATE or LOW when rated; None when unrated.
+    severity: str | None
+    summary: str | None
+    package: str
+    version: str
+    relation: Literal["self", "direct", "indirect"]
+    fixed_in: str | None
+    #: The advisory belongs to the official MCP SDK.
+    mcp_sdk: bool
+    url: str
+
+
+class DependencyPackage(TypedDict):
+    registry: Literal["npm", "pypi"]
+    name: str
+    version: str
+    #: ``pending`` until the graph is read and matched, ``unknown`` when the resolver does not know the version.
+    status: Literal["resolved", "incomplete", "pending", "unknown"]
+    dependency_count: int
+    mcp_sdk: dict[str, str] | None
+    resolved_at: str | None
+    advisories_checked_at: str | None
+    advisories: list[DependencyAdvisory]
+
+
+class DependenciesResponse(TypedDict):
+    server: str
+    packages: list[DependencyPackage]
+    attribution: str
     next_actions: list[NextAction]

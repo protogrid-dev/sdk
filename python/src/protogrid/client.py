@@ -9,7 +9,7 @@ import time
 
 import httpx
 
-from .types import CheckResponse, ConnectionResponse, ConnectionTarget, Descriptor, ListToolsResponse, SearchResponse, ToolEntry
+from .types import ChangesResponse, CheckResponse, ConnectionResponse, ConnectionTarget, DependenciesResponse, Descriptor, ListToolsResponse, QualityFlag, QualityResponse, SearchResponse, ToolEntry
 
 
 #: The public registry. Pass ``base_url="http://localhost:8080"`` for a self-hosted or local stack.
@@ -30,7 +30,20 @@ class ProtogridError(Exception):
         return str(self.body.get("error") or f"http_{self.status}")
 
 
-def _search_params(q: str, limit: int | None, class_: Sequence[str] | None, transport: str | None, category: str | None, min_trust: int | None, flags: Sequence[str] | None, exclude_flags: Sequence[str] | None) -> dict[str, str]:
+def _search_params(
+    q: str,
+    limit: int | None,
+    class_: Sequence[str] | None,
+    transport: str | None,
+    category: str | None,
+    min_trust: int | None,
+    flags: Sequence[str] | None,
+    exclude_flags: Sequence[str] | None,
+    min_quality: int | None = None,
+    quality_flags: Sequence[str] | None = None,
+    exclude_quality_flags: Sequence[str] | None = None,
+    owner_verified: bool | None = None,
+) -> dict[str, str]:
     p: dict[str, str] = {"q": q}
     if limit is not None:
         p["limit"] = str(limit)
@@ -46,7 +59,24 @@ def _search_params(q: str, limit: int | None, class_: Sequence[str] | None, tran
         p["flags"] = ",".join(flags)
     if exclude_flags:
         p["exclude_flags"] = ",".join(exclude_flags)
+    if min_quality is not None:
+        p["min_quality"] = str(min_quality)
+    if quality_flags:
+        p["quality_flags"] = ",".join(quality_flags)
+    if exclude_quality_flags:
+        p["exclude_quality_flags"] = ",".join(exclude_quality_flags)
+    if owner_verified is not None:
+        p["owner_verified"] = "true" if owner_verified else "false"
     return p
+
+
+def _changes_params(limit: int | None, before: int | None) -> dict[str, str] | None:
+    p: dict[str, str] = {}
+    if limit is not None:
+        p["limit"] = str(limit)
+    if before is not None:
+        p["before"] = str(before)
+    return p or None
 
 
 def _raise_for(res: httpx.Response) -> None:
@@ -110,8 +140,26 @@ class ProtogridClient(_Base):
         _raise_for(res)
         return res.json()
 
-    def search(self, q: str, *, limit: int | None = None, class_: Sequence[str] | None = None, transport: str | None = None, category: str | None = None, min_trust: int | None = None, flags: Sequence[str] | None = None, exclude_flags: Sequence[str] | None = None) -> SearchResponse:
-        return self._get("/v1/search", _search_params(q, limit, class_, transport, category, min_trust, flags, exclude_flags))
+    def search(
+        self,
+        q: str,
+        *,
+        limit: int | None = None,
+        class_: Sequence[str] | None = None,
+        transport: str | None = None,
+        category: str | None = None,
+        min_trust: int | None = None,
+        flags: Sequence[str] | None = None,
+        exclude_flags: Sequence[str] | None = None,
+        min_quality: int | None = None,
+        quality_flags: Sequence[QualityFlag] | None = None,
+        exclude_quality_flags: Sequence[QualityFlag] | None = None,
+        owner_verified: bool | None = None,
+    ) -> SearchResponse:
+        """Searches servers by intent. ``min_quality`` leaves unscored servers out; ``exclude_quality_flags``
+        such as ``["known-vulns"]`` drops servers whose dependency checks fail; ``owner_verified=True`` keeps
+        servers whose owner proved control of the namespace (not an audit)."""
+        return self._get("/v1/search", _search_params(q, limit, class_, transport, category, min_trust, flags, exclude_flags, min_quality, quality_flags, exclude_quality_flags, owner_verified))
 
     def get_server(self, name: str, *, schemas: bool = False) -> Descriptor:
         return self._get(self._server_path(name), {"schemas": "true"} if schemas else None)
@@ -134,21 +182,35 @@ class ProtogridClient(_Base):
             if not cursor:
                 return out
 
+    def get_quality(self, name: str, *, days: int | None = None) -> QualityResponse:
+        """The quality block, the verified owner and the daily score for the last ``days`` (default 90, up to 400)."""
+        return self._get(self._server_path(name, "/quality"), {"days": str(days)} if days is not None else None)
+
+    def get_changes(self, name: str, *, limit: int | None = None, before: int | None = None) -> ChangesResponse:
+        """Tool-definition history, newest first; pass ``next_before`` back as ``before`` for the next page."""
+        return self._get(self._server_path(name, "/changes"), _changes_params(limit, before))
+
+    def get_dependencies(self, name: str) -> DependenciesResponse:
+        """npm and PyPI packages of the server with their resolved dependency graphs and known advisories."""
+        return self._get(self._server_path(name, "/dependencies"))
+
     def get_connection(self, name: str, target: ConnectionTarget = "mcpServers") -> ConnectionResponse:
         return self._get(self._server_path(name, "/connection"), {"target": target})
 
-    def check(self, url: str, *, wait: float = 90.0) -> CheckResponse:
+    def check(self, url: str, *, wait: float = 90.0, fresh: bool = False) -> CheckResponse:
         """Checks a remote MCP server URL, listed or not: one credential-free probe (no tool is
         called), the quality checks and the readiness for the Claude and OpenAI directories.
 
         Waits for the result up to ``wait`` seconds (0 returns at once) and returns the check as it
         stands then; read a ``queued`` or ``running`` one later with :meth:`get_check`. The same URL
-        within a few minutes returns the recent check. A refused URL raises ``invalid_url``; an
-        exhausted hourly allowance raises ``check_quota_exceeded`` with ``retry_after``.
+        within a few minutes returns the recent check, unless ``fresh`` is set with an API key (for CI
+        right after a deploy; it counts against the hourly allowance, and anonymous calls ignore it).
+        A refused URL raises ``invalid_url``; an exhausted hourly allowance raises
+        ``check_quota_exceeded`` with ``retry_after``.
         """
         deadline = time.monotonic() + wait
         w = self._wait_left(deadline)
-        res = self._http.post("/v1/check", params={"wait": str(w)}, json={"url": url}, timeout=self._timeout + w)
+        res = self._http.post("/v1/check", params={"wait": str(w)}, json={"url": url, "fresh": True} if fresh else {"url": url}, timeout=self._timeout + w)
         _raise_for(res)
         c: CheckResponse = res.json()
         while self._pending(c) and self._wait_left(deadline) > 0:
@@ -186,8 +248,26 @@ class AsyncProtogridClient(_Base):
         _raise_for(res)
         return res.json()
 
-    async def search(self, q: str, *, limit: int | None = None, class_: Sequence[str] | None = None, transport: str | None = None, category: str | None = None, min_trust: int | None = None, flags: Sequence[str] | None = None, exclude_flags: Sequence[str] | None = None) -> SearchResponse:
-        return await self._get("/v1/search", _search_params(q, limit, class_, transport, category, min_trust, flags, exclude_flags))
+    async def search(
+        self,
+        q: str,
+        *,
+        limit: int | None = None,
+        class_: Sequence[str] | None = None,
+        transport: str | None = None,
+        category: str | None = None,
+        min_trust: int | None = None,
+        flags: Sequence[str] | None = None,
+        exclude_flags: Sequence[str] | None = None,
+        min_quality: int | None = None,
+        quality_flags: Sequence[QualityFlag] | None = None,
+        exclude_quality_flags: Sequence[QualityFlag] | None = None,
+        owner_verified: bool | None = None,
+    ) -> SearchResponse:
+        """Searches servers by intent. ``min_quality`` leaves unscored servers out; ``exclude_quality_flags``
+        such as ``["known-vulns"]`` drops servers whose dependency checks fail; ``owner_verified=True`` keeps
+        servers whose owner proved control of the namespace (not an audit)."""
+        return await self._get("/v1/search", _search_params(q, limit, class_, transport, category, min_trust, flags, exclude_flags, min_quality, quality_flags, exclude_quality_flags, owner_verified))
 
     async def get_server(self, name: str, *, schemas: bool = False) -> Descriptor:
         return await self._get(self._server_path(name), {"schemas": "true"} if schemas else None)
@@ -210,21 +290,35 @@ class AsyncProtogridClient(_Base):
             if not cursor:
                 return out
 
+    async def get_quality(self, name: str, *, days: int | None = None) -> QualityResponse:
+        """The quality block, the verified owner and the daily score for the last ``days`` (default 90, up to 400)."""
+        return await self._get(self._server_path(name, "/quality"), {"days": str(days)} if days is not None else None)
+
+    async def get_changes(self, name: str, *, limit: int | None = None, before: int | None = None) -> ChangesResponse:
+        """Tool-definition history, newest first; pass ``next_before`` back as ``before`` for the next page."""
+        return await self._get(self._server_path(name, "/changes"), _changes_params(limit, before))
+
+    async def get_dependencies(self, name: str) -> DependenciesResponse:
+        """npm and PyPI packages of the server with their resolved dependency graphs and known advisories."""
+        return await self._get(self._server_path(name, "/dependencies"))
+
     async def get_connection(self, name: str, target: ConnectionTarget = "mcpServers") -> ConnectionResponse:
         return await self._get(self._server_path(name, "/connection"), {"target": target})
 
-    async def check(self, url: str, *, wait: float = 90.0) -> CheckResponse:
+    async def check(self, url: str, *, wait: float = 90.0, fresh: bool = False) -> CheckResponse:
         """Checks a remote MCP server URL, listed or not: one credential-free probe (no tool is
         called), the quality checks and the readiness for the Claude and OpenAI directories.
 
         Waits for the result up to ``wait`` seconds (0 returns at once) and returns the check as it
         stands then; read a ``queued`` or ``running`` one later with :meth:`get_check`. The same URL
-        within a few minutes returns the recent check. A refused URL raises ``invalid_url``; an
-        exhausted hourly allowance raises ``check_quota_exceeded`` with ``retry_after``.
+        within a few minutes returns the recent check, unless ``fresh`` is set with an API key (for CI
+        right after a deploy; it counts against the hourly allowance, and anonymous calls ignore it).
+        A refused URL raises ``invalid_url``; an exhausted hourly allowance raises
+        ``check_quota_exceeded`` with ``retry_after``.
         """
         deadline = time.monotonic() + wait
         w = self._wait_left(deadline)
-        res = await self._http.post("/v1/check", params={"wait": str(w)}, json={"url": url}, timeout=self._timeout + w)
+        res = await self._http.post("/v1/check", params={"wait": str(w)}, json={"url": url, "fresh": True} if fresh else {"url": url}, timeout=self._timeout + w)
         _raise_for(res)
         c: CheckResponse = res.json()
         while self._pending(c) and self._wait_left(deadline) > 0:
