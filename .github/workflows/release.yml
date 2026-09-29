@@ -29,7 +29,7 @@ jobs:
     defaults: { run: { working-directory: python } }
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync && uv run pytest -q
       - name: check tag matches package version
         run: test "python-v$(uv version --short)" = "${{ github.ref_name }}"
