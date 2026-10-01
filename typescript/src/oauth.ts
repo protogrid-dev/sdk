@@ -76,6 +76,11 @@ export interface ConsentHandler {
   onAuthorizationUrl(url: URL): void | Promise<void>;
   /** Resolves with the `code` from the redirect. */
   waitForCode(opts?: { timeoutMs?: number }): Promise<string>;
+  /**
+   * Resolves with all the query parameters of the redirect. When present, `connectClient` uses it
+   * instead of `waitForCode` and refuses a redirect whose `state` this flow did not send.
+   */
+  waitForCallback?(opts?: { timeoutMs?: number }): Promise<URLSearchParams>;
   close?(): void | Promise<void>;
 }
 
@@ -96,11 +101,9 @@ export interface LoopbackOptions {
 export async function loopbackConsent(opts: LoopbackOptions = {}): Promise<ConsentHandler> {
   const host = opts.host ?? "127.0.0.1";
   const path = opts.path ?? "/callback";
-  let resolveCode: ((code: string) => void) | null = null;
-  let rejectCode: ((err: Error) => void) | null = null;
-  const pending = new Promise<string>((res, rej) => {
-    resolveCode = res;
-    rejectCode = rej;
+  let resolveCallback: ((params: URLSearchParams) => void) | null = null;
+  const pending = new Promise<URLSearchParams>((res) => {
+    resolveCallback = res;
   });
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://${host}`);
@@ -108,25 +111,45 @@ export async function loopbackConsent(opts: LoopbackOptions = {}): Promise<Conse
       res.writeHead(404).end();
       return;
     }
-    const code = url.searchParams.get("code");
-    const error = url.searchParams.get("error");
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     res.end(opts.successHtml ?? "<!doctype html><title>Authorized</title><p>Authorization received. You can close this tab.</p>");
-    if (code) resolveCode?.(code);
-    else rejectCode?.(new Error(`authorization failed: ${error ?? "no code in redirect"} ${url.searchParams.get("error_description") ?? ""}`.trim()));
+    resolveCallback?.(url.searchParams);
   });
   await new Promise<void>((res) => server.listen(opts.port ?? 0, host, res));
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : opts.port;
+  const waitForCallback = ({ timeoutMs = 5 * 60_000 } = {}) => {
+    const t = new Promise<URLSearchParams>((_, rej) => setTimeout(() => rej(new Error("timed out waiting for the authorization redirect")), timeoutMs).unref());
+    return Promise.race([pending, t]);
+  };
   return {
     redirectUrl: `http://${host}:${port}${path}`,
     onAuthorizationUrl: opts.onAuthorizationUrl ?? ((url) => console.error(`Open this URL to authorize:\n${url}`)),
-    waitForCode: ({ timeoutMs = 5 * 60_000 } = {}) => {
-      const t = new Promise<string>((_, rej) => setTimeout(() => rej(new Error("timed out waiting for the authorization redirect")), timeoutMs).unref());
-      return Promise.race([pending, t]);
-    },
+    waitForCallback,
+    waitForCode: async (o) => codeFrom(await waitForCallback(o)),
     close: () => new Promise<void>((res) => server.close(() => res())),
   };
+}
+
+/** The code of a redirect, or why there is none (the error code only, never `error_description`). */
+function codeFrom(params: URLSearchParams): string {
+  const error = params.get("error");
+  if (error != null) throw new Error(`authorization was not granted (${/^[a-z_]{1,64}$/.test(error) ? error : "unknown"})`);
+  const code = params.get("code");
+  if (!code) throw new Error("authorization redirect has no code");
+  return code;
+}
+
+/**
+ * Checks the redirect of a consent before its code is used: the `state` must be the one this flow
+ * stored for `serverName` (it is used once). Returns the code.
+ */
+export async function verifyCallback(store: TokenStore, serverName: string, params: URLSearchParams): Promise<string> {
+  const expected = (await store.get(`${serverName}:state`)) as string | undefined;
+  await store.delete(`${serverName}:state`);
+  const state = params.get("state");
+  if (!expected || !state || state !== expected) throw new Error("authorization redirect refused: its state does not match this flow");
+  return codeFrom(params);
 }
 
 /** For headless agents: the host relays the URL and the code (e.g. via a chat or a queue). */

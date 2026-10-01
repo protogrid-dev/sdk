@@ -4,7 +4,7 @@
  */
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { ProtogridClient, SearchParams } from "./client.js";
-import { createOAuthProvider, hasTokens, type OAuthOptions, type TokenStore } from "./oauth.js";
+import { createOAuthProvider, hasTokens, verifyCallback, type OAuthOptions, type TokenStore } from "./oauth.js";
 import { placeholdersIn, substituteSecrets } from "./secrets.js";
 import type { McpServersConnection, McpServersEntry, SearchResult } from "./types.js";
 
@@ -92,7 +92,8 @@ export async function connectClient(client: Connectable_Client, conn: McpServers
     return first;
   } catch (err) {
     if (!opts.oauth || !isUnauthorized(err)) throw err;
-    const code = await opts.oauth.consent.waitForCode();
+    const { consent, store } = opts.oauth;
+    const code = consent.waitForCallback ? await verifyCallback(store, conn.server, await consent.waitForCallback()) : await consent.waitForCode();
     await (first as unknown as { finishAuth(code: string): Promise<void> }).finishAuth(code);
     await first.close().catch(() => {});
     const second = await createTransport(conn, secrets, opts);

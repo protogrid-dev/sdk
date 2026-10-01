@@ -3,7 +3,7 @@
  * server: consent once, then reconnect with stored tokens and no human step.
  */
 import http from "node:http";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -20,6 +20,8 @@ const readBody = (req: http.IncomingMessage) => new Promise<string>((res) => { l
 let as: http.Server, rs: http.Server, asUrl: string, rsUrl: string;
 const asLog: string[] = [];
 const ACCESS = "tok-" + Math.random().toString(36).slice(2);
+/** How the fake authorization server answers the next /authorize: like a real one, or like an attacker. */
+let redirectMode: "ok" | "foreign-state" | "error" = "ok";
 
 beforeAll(async () => {
   // --- fake authorization server: metadata, dynamic registration, authorize (auto-approve), token ---
@@ -39,8 +41,13 @@ beforeAll(async () => {
       expect(url.searchParams.get("code_challenge_method")).toBe("S256");
       expect(url.searchParams.get("client_id")).toBe("client-123");
       const redirect = new URL(url.searchParams.get("redirect_uri")!);
-      redirect.searchParams.set("code", "code-xyz");
-      redirect.searchParams.set("state", url.searchParams.get("state") ?? "");
+      if (redirectMode === "error") {
+        redirect.searchParams.set("error", "access_denied");
+        redirect.searchParams.set("error_description", "<script>alert(1)</script> call +1 555");
+      } else {
+        redirect.searchParams.set("code", "code-xyz");
+      }
+      redirect.searchParams.set("state", redirectMode === "foreign-state" ? "attacker-state" : (url.searchParams.get("state") ?? ""));
       res.writeHead(302, { location: redirect.toString() }).end();
       return;
     }
@@ -91,6 +98,10 @@ beforeAll(async () => {
 afterAll(() => {
   as.close();
   rs.close();
+});
+
+beforeEach(() => {
+  redirectMode = "ok";
 });
 
 const connection = (): McpServersConnection => ({
@@ -144,6 +155,27 @@ describe("oauth consent flow", () => {
     expect(asked).toBe(0);
     await transport.close();
     await consent.close?.();
+  });
+
+  const refused = async (mode: typeof redirectMode) => {
+    redirectMode = mode;
+    const fresh = new MemoryTokenStore();
+    const tokenPosts = asLog.filter((l) => l === "POST /token").length;
+    const consent = await loopbackConsent({ onAuthorizationUrl: async (url) => void (await fetch(url, { redirect: "follow" })) });
+    const client = new Client({ name: "t3", version: "0" });
+    const err = await connectClient(client, connection(), {}, { oauth: { store: fresh, consent } }).then(() => null, (e: unknown) => e);
+    await consent.close?.();
+    expect(asLog.filter((l) => l === "POST /token").length).toBe(tokenPosts); // no code was exchanged
+    expect(await hasTokens(fresh, "test.example/protected")).toBe(false);
+    return err as Error;
+  };
+
+  it("refuses a redirect whose state this flow did not send", async () => {
+    expect((await refused("foreign-state")).message).toMatch(/state does not match/);
+  });
+
+  it("reports a denied consent by its error code only", async () => {
+    expect((await refused("error")).message).toBe("authorization was not granted (access_denied)");
   });
 
   it("findConnectable treats R2 as connectable only with stored tokens", async () => {
