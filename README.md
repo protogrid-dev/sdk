@@ -4,7 +4,7 @@ Clients for [protogrid](https://protogrid.dev), the MCP registry for agents: sea
 
 | package | install | docs |
 |---|---|---|
-| TypeScript `@protogrid/sdk` ([typescript/](typescript/)) | `pnpm add @protogrid/sdk @modelcontextprotocol/sdk` | [docs.protogrid.dev/sdk/typescript](https://docs.protogrid.dev/sdk/typescript/) |
+| TypeScript `@protogrid/sdk` ([typescript/](typescript/)) | `pnpm add @protogrid/sdk @modelcontextprotocol/client` | [docs.protogrid.dev/sdk/typescript](https://docs.protogrid.dev/sdk/typescript/) |
 | Python `protogrid-sdk` ([python/](python/)) | `uv add "protogrid-sdk[mcp]"` | [docs.protogrid.dev/sdk/python](https://docs.protogrid.dev/sdk/python/) |
 
 Both talk to `https://api.protogrid.dev` by default and to any self-hosted registry by base URL.

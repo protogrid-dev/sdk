@@ -4,7 +4,7 @@
  *   npx tsx examples/oauth-consent.ts <server-name> [token-file]
  * Uses the public registry; set REGISTRY_URL=http://localhost:8080 for a local stack.
  */
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { Client } from "@modelcontextprotocol/client";
 import { connectClient, createClient, FileTokenStore, hasTokens, loopbackConsent } from "../src/index.js";
 
 const registry = createClient(process.env.REGISTRY_URL ? { baseUrl: process.env.REGISTRY_URL } : {});
@@ -18,7 +18,7 @@ const conn = await registry.getConnection(name);
 console.log(`${name}: class ${conn.class}, auth ${conn.auth_type ?? "?"}, tokens stored: ${await hasTokens(store, name)}`);
 
 const consent = await loopbackConsent({ port: 8765 });
-const mcp = new Client({ name: "protogrid-oauth-example", version: "0.1.0" });
+const mcp = new Client({ name: "protogrid-oauth-example", version: "0.1.0" }, { versionNegotiation: { mode: "auto" } });
 const t0 = Date.now();
 await connectClient(mcp, conn, process.env, { oauth: { store, consent, clientName: "protogrid example" } });
 await consent.close?.();
