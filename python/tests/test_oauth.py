@@ -10,14 +10,18 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import httpx
 import pytest
 
-from protogrid import MemoryTokenStore, OAuthOptions, has_tokens, loopback_consent, open_session
+from protogrid import MemoryTokenStore, OAuthOptions, has_tokens, loopback_consent, manual_consent, open_session
 
 ACCESS = "tok-secret-1"
 TOOLS = [{"name": "whoami", "description": "returns the caller", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}}}]
 
 
 class Servers:
-    def __init__(self) -> None:
+    """``iss``: None for an authorization server without RFC 9207; "right" or "wrong" to advertise it and put that
+    issuer (its own, or another) in the redirect."""
+
+    def __init__(self, iss: str | None = None) -> None:
+        self.iss = iss
         self.as_log: list[str] = []
         self.as_srv = ThreadingHTTPServer(("127.0.0.1", 0), self._as_handler())
         self.as_url = f"http://127.0.0.1:{self.as_srv.server_address[1]}"
@@ -46,11 +50,14 @@ class Servers:
             def do_GET(self):
                 u = urlparse(self.path); outer.as_log.append(f"GET {u.path}")
                 if u.path == "/.well-known/oauth-authorization-server":
-                    return self._json(200, {"issuer": outer.as_url, "authorization_endpoint": f"{outer.as_url}/authorize", "token_endpoint": f"{outer.as_url}/token", "registration_endpoint": f"{outer.as_url}/register", "response_types_supported": ["code"], "grant_types_supported": ["authorization_code", "refresh_token"], "code_challenge_methods_supported": ["S256"], "token_endpoint_auth_methods_supported": ["none"]})
+                    return self._json(200, {"issuer": outer.as_url, "authorization_endpoint": f"{outer.as_url}/authorize", "token_endpoint": f"{outer.as_url}/token", "registration_endpoint": f"{outer.as_url}/register", "response_types_supported": ["code"], "grant_types_supported": ["authorization_code", "refresh_token"], "code_challenge_methods_supported": ["S256"], "token_endpoint_auth_methods_supported": ["none"], **({"authorization_response_iss_parameter_supported": True} if outer.iss else {})})
                 if u.path == "/authorize":
                     q = parse_qs(u.query)
                     assert q["code_challenge_method"] == ["S256"] and q["client_id"] == ["client-123"]
-                    loc = q["redirect_uri"][0] + "?" + urlencode({"code": "code-xyz", "state": q.get("state", [""])[0]})
+                    params = {"code": "code-xyz", "state": q.get("state", [""])[0]}
+                    if outer.iss:
+                        params["iss"] = outer.as_url if outer.iss == "right" else "https://attacker.example"
+                    loc = q["redirect_uri"][0] + "?" + urlencode(params)
                     self.send_response(302); self.send_header("location", loc); self.end_headers(); return
                 self.send_response(404); self.end_headers()
 
@@ -162,3 +169,71 @@ async def test_reconnect_without_human(servers: Servers):
     finally:
         consent.close()
     assert asked == 0
+
+
+# RFC 9207: an authorization server that advertises authorization_response_iss_parameter_supported puts `iss` in the
+# redirect, and the mcp client rejects a redirect without it or with another issuer (mix-up attacks).
+
+
+async def _follow(url: str) -> None:
+    async with httpx.AsyncClient(follow_redirects=True) as c:
+        await c.get(url)
+
+
+async def test_issuer_in_the_redirect_is_passed_on():
+    s = Servers(iss="right")
+    own = MemoryTokenStore()
+    consent = loopback_consent(on_authorization_url=_follow)
+    try:
+        async with open_session(conn_for(s), {}, oauth=OAuthOptions(store=own, consent=consent)) as session:
+            assert [t.name for t in (await session.list_tools()).tools] == ["whoami"]
+    finally:
+        consent.close()
+        s.close()
+    assert has_tokens(own, "test.example/protected")
+
+
+async def test_another_issuer_is_refused_before_any_code_exchange():
+    s = Servers(iss="wrong")
+    own = MemoryTokenStore()
+    consent = loopback_consent(on_authorization_url=_follow)
+    try:
+        with pytest.raises(BaseException) as e:
+            async with open_session(conn_for(s), {}, oauth=OAuthOptions(store=own, consent=consent)) as session:
+                await session.list_tools()
+        assert "iss mismatch" in repr(e.value) or "iss mismatch" in str(getattr(e.value, "exceptions", ""))
+    finally:
+        consent.close()
+        s.close()
+    assert not has_tokens(own, "test.example/protected")
+    assert "POST /token" not in s.as_log
+
+
+def _relay(s: Servers, with_iss: bool):
+    """A headless relay: follows the authorization URL itself and hands back what the redirect carried."""
+    got: dict[str, str] = {}
+
+    async def show(url: str) -> None:
+        async with httpx.AsyncClient(follow_redirects=False) as c:
+            r = await c.get(url)
+        got.update({k: v[0] for k, v in parse_qs(urlparse(r.headers["location"]).query).items()})
+
+    async def wait():
+        return (got["code"], got.get("state"), got.get("iss")) if with_iss else (got["code"], got.get("state"))
+
+    return manual_consent("http://127.0.0.1:9/callback", show, wait)
+
+
+async def test_manual_consent_takes_two_or_three_values():
+    plain = Servers()
+    try:
+        async with open_session(conn_for(plain), {}, oauth=OAuthOptions(store=MemoryTokenStore(), consent=_relay(plain, with_iss=False))) as session:
+            assert [t.name for t in (await session.list_tools()).tools] == ["whoami"]
+    finally:
+        plain.close()
+    rfc9207 = Servers(iss="right")
+    try:
+        async with open_session(conn_for(rfc9207), {}, oauth=OAuthOptions(store=MemoryTokenStore(), consent=_relay(rfc9207, with_iss=True))) as session:
+            assert [t.name for t in (await session.list_tools()).tools] == ["whoami"]
+    finally:
+        rfc9207.close()

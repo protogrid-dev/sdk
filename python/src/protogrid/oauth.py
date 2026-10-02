@@ -79,14 +79,19 @@ def has_tokens(store: TokenStore, server_name: str) -> bool:
 
 # ---------- consent ----------
 
+# What the redirect carried: (code, state) or (code, state, iss). Pass `iss` whenever the redirect has one: an
+# authorization server that advertises RFC 9207 support puts it there, and the client refuses the response without
+# it, or with another issuer (mix-up attacks).
+CodeResult = tuple[str, str | None] | tuple[str, str | None, str | None]
+
 
 @dataclass
 class ConsentHandler:
-    """How the one-time consent happens: show the URL, then hand back the code and state."""
+    """How the one-time consent happens: show the URL, then hand back the code, the state and the issuer."""
 
     redirect_url: str
     on_authorization_url: Callable[[str], Awaitable[None]]
-    wait_for_code: Callable[[], Awaitable[tuple[str, str | None]]]
+    wait_for_code: Callable[[], Awaitable[CodeResult]]
     close: Callable[[], None] | None = None
 
 
@@ -110,6 +115,7 @@ def loopback_consent(*, host: str = "127.0.0.1", port: int = 0, path: str = "/ca
             if "code" in q:
                 result["code"] = q["code"][0]
                 result["state"] = q.get("state", [None])[0]
+                result["iss"] = q.get("iss", [None])[0]
             else:
                 result["error"] = f"{q.get('error', ['no code in redirect'])[0]} {q.get('error_description', [''])[0]}".strip()
             got.set()
@@ -129,19 +135,22 @@ def loopback_consent(*, host: str = "127.0.0.1", port: int = 0, path: str = "/ca
     async def default_show(url: str) -> None:
         print(f"Open this URL to authorize:\n{url}", file=sys.stderr)
 
-    async def wait() -> tuple[str, str | None]:
+    async def wait() -> CodeResult:
         ok = await asyncio.to_thread(got.wait, timeout)
         if not ok:
             raise TimeoutError("timed out waiting for the authorization redirect")
         if "error" in result:
             raise RuntimeError(f"authorization failed: {result['error']}")
-        return result["code"], result.get("state")
+        return result["code"], result.get("state"), result.get("iss")
 
     return ConsentHandler(redirect_url=f"http://{host}:{actual_port}{path}", on_authorization_url=on_authorization_url or default_show, wait_for_code=wait, close=close)
 
 
-def manual_consent(redirect_url: str, on_authorization_url: Callable[[str], Awaitable[None]], wait_for_code: Callable[[], Awaitable[tuple[str, str | None]]]) -> ConsentHandler:
-    """For headless agents: relay the URL and the code through whatever channel exists."""
+def manual_consent(redirect_url: str, on_authorization_url: Callable[[str], Awaitable[None]], wait_for_code: Callable[[], Awaitable[CodeResult]]) -> ConsentHandler:
+    """For headless agents: relay the URL and the redirect's parameters through whatever channel exists.
+
+    ``wait_for_code`` returns ``(code, state, iss)``, or ``(code, state)`` when the redirect had no ``iss``.
+    """
     return ConsentHandler(redirect_url=redirect_url, on_authorization_url=on_authorization_url, wait_for_code=wait_for_code)
 
 
@@ -174,8 +183,10 @@ def oauth_provider(server_name: str, server_url: str, *, store: TokenStore, cons
             store.set(k_client, client_info.model_dump(mode="json", exclude_none=True))
 
     async def callback() -> AuthorizationCodeResult:
-        code, state = await consent.wait_for_code()
-        return AuthorizationCodeResult(code=code, state=state)
+        got = await consent.wait_for_code()
+        code, state = got[0], got[1]
+        iss = got[2] if len(got) > 2 else None
+        return AuthorizationCodeResult(code=code, state=state, iss=iss)
 
     metadata = OAuthClientMetadata(
         client_name=client_name,
