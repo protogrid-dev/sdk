@@ -82,6 +82,17 @@ describe("client", () => {
     await client.search({ q: "db", owner_verified: false });
     expect(calls.at(-1)).toBe("http://reg/v1/search?q=db&owner_verified=false|Bearer k");
   });
+  it("takes a plain string as the query", async () => {
+    await client.search("send an email");
+    expect(calls.at(-1)).toBe("http://reg/v1/search?q=send+an+email|Bearer k");
+  });
+  it("refuses a search without a query instead of sending one", async () => {
+    const sent = calls.length;
+    for (const bad of [undefined, "", "   ", {}, { q: "" }, { query: "send an email" }, 42]) {
+      await expect(client.search(bad as never)).rejects.toThrow(TypeError);
+    }
+    expect(calls.length).toBe(sent);
+  });
   it("reads quality, changes and dependencies", async () => {
     await client.getQuality("io.github.acme/acme-mcp", { days: 30 });
     expect(calls.at(-1)).toBe("http://reg/v1/servers/io.github.acme%2Facme-mcp/quality?days=30|Bearer k");

@@ -82,7 +82,12 @@ export class ProtogridClient {
     if (!this.fetchImpl) throw new Error("no fetch available; pass one in ClientOptions.fetch");
   }
 
-  search(params: SearchParams): Promise<SearchResponse> {
+  /** `search("text")` is shorthand for `search({ q: "text" })`. A missing or empty query rejects with a `TypeError`. */
+  search(params: SearchParams | string): Promise<SearchResponse> {
+    if (typeof params === "string") params = { q: params };
+    if (typeof params?.q !== "string" || params.q.trim() === "") {
+      return Promise.reject(new TypeError('search needs a query: search("send an email") or search({ q: "send an email", ... })'));
+    }
     const q = new URLSearchParams({ q: params.q });
     if (params.limit != null) q.set("limit", String(params.limit));
     if (params.class?.length) q.set("class", params.class.join(","));
