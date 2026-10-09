@@ -26,7 +26,9 @@ await mcp.connect(await createTransport(found!.connection, process.env));
   https://docs.protogrid.dev/sdk/typescript/#versions-and-compatibility
 - R2 (OAuth) servers: `connectClient(client, conn, secrets, { oauth: { store, consent } })` runs the one-time consent
   (`loopbackConsent` or `manualConsent`) and keeps tokens in your `TokenStore`; later runs need no human. The redirect's
-  `state` and issuer are checked before any code is exchanged.
+  `state` and issuer are checked before any code is exchanged. Stored tokens and client information that do not name the
+  authorization server that issued them (`issuer`, as saved by MCP SDKs before GHSA-6qxp-vccf-f47h was fixed) are ignored,
+  so the agent signs in once more (0.5.1).
 - `toClaudeAgentSdk` / `toRawTransport` are pure formatters for the Claude Agent SDK and hand-built transports.
 - Trust scores derive from observable signals only; no code audit is implied.
 

@@ -67,9 +67,19 @@ export class FileTokenStore implements TokenStore {
   }
 }
 
-/** True when the store already holds tokens for `serverName` (so an R2 server needs no human now). */
+/**
+ * Stored tokens or client information count only when they name the authorization server that issued
+ * them. Earlier MCP SDKs saved them without `issuer` and would send them to whichever server an MCP
+ * server named (GHSA-6qxp-vccf-f47h), so such values are ignored and the agent signs in once more.
+ */
+function withIssuer<T>(value: unknown): T | undefined {
+  const issuer = value && typeof value === "object" ? (value as { issuer?: unknown }).issuer : undefined;
+  return typeof issuer === "string" && issuer !== "" ? (value as T) : undefined;
+}
+
+/** True when the store already holds usable tokens for `serverName` (so an R2 server needs no human now). */
 export async function hasTokens(store: TokenStore, serverName: string): Promise<boolean> {
-  return (await store.get(`${serverName}:tokens`)) != null;
+  return withIssuer(await store.get(`${serverName}:tokens`)) !== undefined;
 }
 
 // ---------- consent ----------
@@ -208,13 +218,13 @@ export function createOAuthProvider(serverName: string, opts: OAuthOptions): OAu
       return s;
     },
     async clientInformation() {
-      return (await store.get(k("client"))) as StoredOAuthClientInformation | undefined;
+      return withIssuer<StoredOAuthClientInformation>(await store.get(k("client")));
     },
     async saveClientInformation(info) {
       await store.set(k("client"), info);
     },
     async tokens() {
-      return (await store.get(k("tokens"))) as StoredOAuthTokens | undefined;
+      return withIssuer<StoredOAuthTokens>(await store.get(k("tokens")));
     },
     async saveTokens(tokens) {
       await store.set(k("tokens"), tokens);

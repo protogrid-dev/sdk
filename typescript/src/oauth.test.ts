@@ -184,6 +184,30 @@ describe("oauth consent flow", () => {
     expect(err.message).toBe("authorization was not granted (access_denied)");
   });
 
+  it("saves the authorization server as issuer with the tokens and the client", async () => {
+    expect((await store.get("test.example/protected:tokens")) as { issuer?: string }).toMatchObject({ issuer: asUrl });
+    expect((await store.get("test.example/protected:client")) as { issuer?: string }).toMatchObject({ issuer: asUrl });
+  });
+
+  it("ignores credentials saved without an issuer and asks for consent again (GHSA-6qxp-vccf-f47h)", async () => {
+    // What an earlier MCP SDK saved: valid tokens and client, with no record of the server that issued them.
+    const old = new MemoryTokenStore();
+    await old.set("test.example/protected:tokens", { access_token: ACCESS, token_type: "Bearer", refresh_token: "refresh-1" });
+    await old.set("test.example/protected:client", { client_id: "client-123" });
+    expect(await hasTokens(old, "test.example/protected")).toBe(false);
+    let asked = 0;
+    const consent = await autoConsent(() => { asked++; });
+    const registrations = asLog.filter((l) => l === "POST /register").length;
+    const client = new Client({ name: "t4", version: "0" }, { versionNegotiation: { mode: "auto" } });
+    const transport = await connectClient(client, connection(), {}, { oauth: { store: old, consent } });
+    expect(asked).toBe(1);
+    expect(asLog.filter((l) => l === "POST /register").length).toBe(registrations + 1);
+    expect((await old.get("test.example/protected:tokens")) as { issuer?: string }).toMatchObject({ issuer: asUrl });
+    expect(await hasTokens(old, "test.example/protected")).toBe(true);
+    await transport.close();
+    await consent.close?.();
+  });
+
   it("findConnectable treats R2 as connectable only with stored tokens", async () => {
     const calls: string[] = [];
     const fake = (async (u: string | URL) => {
