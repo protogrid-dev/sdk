@@ -1,8 +1,8 @@
 /**
- * From a `mcpServers` connection block to a live transport of the official MCP client SDK v2
- * (`@modelcontextprotocol/client`, optional peer dependency, imported lazily).
+ * From a `mcpServers` connection block to a live transport of the official MCP SDK
+ * (`@modelcontextprotocol/sdk`, optional peer dependency, imported lazily).
  */
-import type { Transport } from "@modelcontextprotocol/client";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { ProtogridClient, SearchParams } from "./client.js";
 import { createOAuthProvider, hasTokens, verifyCallback, type OAuthOptions, type TokenStore } from "./oauth.js";
 import { placeholdersIn, substituteSecrets } from "./secrets.js";
@@ -34,24 +34,9 @@ export function secretsSatisfied(conn: McpServersConnection, secrets: Secrets = 
   return placeholdersIn(conn.connection).every((n) => secrets[n] != null);
 }
 
-const MISSING_MCP_CLIENT =
-  "@protogrid/sdk needs @modelcontextprotocol/client 2.x to connect (npm install @modelcontextprotocol/client); " +
-  "with the v1 package @modelcontextprotocol/sdk, use @protogrid/sdk 0.4.x";
-
-/** Imports a module of the official MCP client SDK, with a clear message when it is not installed. */
-async function mcpClient<T>(load: () => Promise<T>): Promise<T> {
-  try {
-    return await load();
-  } catch (err) {
-    const code = (err as { code?: unknown }).code;
-    if (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") throw new Error(MISSING_MCP_CLIENT, { cause: err });
-    throw err;
-  }
-}
-
 /**
  * Builds a transport for the preferred remote (streamable HTTP / SSE) or package (stdio).
- * Requires `@modelcontextprotocol/client` 2.x to be installed by the caller. (Casts: the SDK's own
+ * Requires `@modelcontextprotocol/sdk` to be installed by the caller. (Casts: the SDK's own
  * types are not written for exactOptionalPropertyTypes.)
  */
 export async function createTransport(conn: McpServersConnection, secrets: Secrets = {}, opts: TransportOptions = {}): Promise<Transport> {
@@ -65,17 +50,17 @@ export async function createTransport(conn: McpServersConnection, secrets: Secre
     if (useOAuth) for (const k of Object.keys(headers)) if (k.toLowerCase() === "authorization" && /\$\{[^}]+\}/.test(headers[k]!)) delete headers[k];
     const authProvider = useOAuth ? createOAuthProvider(conn.server, opts.oauth!) : undefined;
     if (entry.type === "sse") {
-      const { SSEClientTransport } = await mcpClient(() => import("@modelcontextprotocol/client"));
+      const { SSEClientTransport } = await import("@modelcontextprotocol/sdk/client/sse.js");
       return new SSEClientTransport(new URL(entry.url), {
         requestInit: { headers },
         eventSourceInit: { fetch: (url, init) => fetch(url, { ...init, headers: mergeHeaders(init?.headers, headers) }) },
         ...(authProvider ? { authProvider } : {}),
       }) as unknown as Transport;
     }
-    const { StreamableHTTPClientTransport } = await mcpClient(() => import("@modelcontextprotocol/client"));
+    const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
     return new StreamableHTTPClientTransport(new URL(entry.url), { requestInit: { headers }, ...(authProvider ? { authProvider } : {}) }) as unknown as Transport;
   }
-  const { StdioClientTransport } = await mcpClient(() => import("@modelcontextprotocol/client/stdio"));
+  const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js");
   return new StdioClientTransport({ command: entry.command, args: entry.args, env: { ...filterEnv(process.env), ...(entry.env ?? {}) } }) as unknown as Transport;
 }
 
@@ -99,8 +84,6 @@ export interface Connectable_Client {
 /**
  * Connects `client` to a server; for R2 servers runs the one-time consent when the store has
  * no usable tokens, finishes the authorization and reconnects. No human step when tokens exist.
- * The redirect's `state` must match the one this flow sent, and its `iss` is checked by the MCP
- * SDK against the authorization server (RFC 9207), before any code is exchanged.
  */
 export async function connectClient(client: Connectable_Client, conn: McpServersConnection, secrets: Secrets = {}, opts: TransportOptions = {}): Promise<Transport> {
   const first = await createTransport(conn, secrets, opts);
@@ -108,10 +91,10 @@ export async function connectClient(client: Connectable_Client, conn: McpServers
     await client.connect(first);
     return first;
   } catch (err) {
-    if (!opts.oauth || !(await isUnauthorized(err))) throw err;
-    const params = await opts.oauth.consent.waitForCallback();
-    await verifyCallback(opts.oauth.store, conn.server, params);
-    await (first as unknown as { finishAuth(params: URLSearchParams): Promise<void> }).finishAuth(params);
+    if (!opts.oauth || !isUnauthorized(err)) throw err;
+    const { consent, store } = opts.oauth;
+    const code = consent.waitForCallback ? await verifyCallback(store, conn.server, await consent.waitForCallback()) : await consent.waitForCode();
+    await (first as unknown as { finishAuth(code: string): Promise<void> }).finishAuth(code);
     await first.close().catch(() => {});
     const second = await createTransport(conn, secrets, opts);
     await client.connect(second);
@@ -119,9 +102,8 @@ export async function connectClient(client: Connectable_Client, conn: McpServers
   }
 }
 
-async function isUnauthorized(err: unknown): Promise<boolean> {
-  const { UnauthorizedError } = await mcpClient(() => import("@modelcontextprotocol/client"));
-  return err instanceof UnauthorizedError;
+function isUnauthorized(err: unknown): boolean {
+  return err instanceof Error && (err.name === "UnauthorizedError" || /unauthorized/i.test(err.message));
 }
 
 export interface Connectable {

@@ -1,6 +1,6 @@
 {
   "name": "@protogrid/sdk",
-  "version": "0.5.1",
+  "version": "0.4.2",
   "description": "Client for the protogrid MCP registry: find servers by intent, get a connection block, connect with no human in the loop.",
   "license": "MIT",
   "type": "module",
@@ -26,17 +26,15 @@
     "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
-    "@modelcontextprotocol/client": "^2.2.0"
+    "@modelcontextprotocol/sdk": ">=1.31.0"
   },
   "peerDependenciesMeta": {
-    "@modelcontextprotocol/client": {
+    "@modelcontextprotocol/sdk": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@modelcontextprotocol/client": "^2.2.0",
-    "@modelcontextprotocol/node": "^2.1.0",
-    "@modelcontextprotocol/server": "^2.1.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
     "zod": "^4.6.5"
@@ -58,6 +56,7 @@
     "protogrid"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "mcp-client-v1"
   }
 }

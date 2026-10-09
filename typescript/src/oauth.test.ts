@@ -1,17 +1,16 @@
 /**
  * End-to-end OAuth flow against an in-process authorization server and a protected MCP
- * server (MCP SDK v2, serving both protocol eras): consent once, then reconnect with stored
- * tokens and no human step; redirects with a foreign state, a foreign issuer or an error are refused.
+ * server: consent once, then reconnect with stored tokens and no human step.
  */
 import http from "node:http";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { Client, IssuerMismatchError } from "@modelcontextprotocol/client";
-import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
-import { toNodeHandler } from "@modelcontextprotocol/node";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { connectClient, findConnectable } from "./connect.js";
 import { createClient } from "./client.js";
-import { hasTokens, loopbackConsent, manualConsent, MemoryTokenStore } from "./oauth.js";
+import { hasTokens, loopbackConsent, MemoryTokenStore } from "./oauth.js";
 import { toClaudeAgentSdk, toRawTransport } from "./formatters.js";
 import type { McpServersConnection } from "./types.js";
 
@@ -22,16 +21,16 @@ let as: http.Server, rs: http.Server, asUrl: string, rsUrl: string;
 const asLog: string[] = [];
 const ACCESS = "tok-" + Math.random().toString(36).slice(2);
 /** How the fake authorization server answers the next /authorize: like a real one, or like an attacker. */
-let redirectMode: "ok" | "foreign-state" | "foreign-iss" | "error" = "ok";
+let redirectMode: "ok" | "foreign-state" | "error" = "ok";
 
 beforeAll(async () => {
-  // --- fake authorization server: metadata (with RFC 9207 iss support), registration, authorize (auto-approve), token ---
+  // --- fake authorization server: metadata, dynamic registration, authorize (auto-approve), token ---
   as = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", asUrl);
     asLog.push(`${req.method} ${url.pathname}`);
     const json = (code: number, body: unknown) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
     if (url.pathname === "/.well-known/oauth-authorization-server") {
-      return json(200, { issuer: asUrl, authorization_endpoint: `${asUrl}/authorize`, token_endpoint: `${asUrl}/token`, registration_endpoint: `${asUrl}/register`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], token_endpoint_auth_methods_supported: ["none"], authorization_response_iss_parameter_supported: true });
+      return json(200, { issuer: asUrl, authorization_endpoint: `${asUrl}/authorize`, token_endpoint: `${asUrl}/token`, registration_endpoint: `${asUrl}/register`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], token_endpoint_auth_methods_supported: ["none"] });
     }
     if (url.pathname === "/register") {
       const meta = JSON.parse(await readBody(req));
@@ -42,15 +41,13 @@ beforeAll(async () => {
       expect(url.searchParams.get("code_challenge_method")).toBe("S256");
       expect(url.searchParams.get("client_id")).toBe("client-123");
       const redirect = new URL(url.searchParams.get("redirect_uri")!);
-      const state = url.searchParams.get("state") ?? "";
       if (redirectMode === "error") {
         redirect.searchParams.set("error", "access_denied");
         redirect.searchParams.set("error_description", "<script>alert(1)</script> call +1 555");
       } else {
         redirect.searchParams.set("code", "code-xyz");
       }
-      redirect.searchParams.set("state", redirectMode === "foreign-state" ? "attacker-state" : state);
-      redirect.searchParams.set("iss", redirectMode === "foreign-iss" ? "https://attacker.example" : asUrl);
+      redirect.searchParams.set("state", redirectMode === "foreign-state" ? "attacker-state" : (url.searchParams.get("state") ?? ""));
       res.writeHead(302, { location: redirect.toString() }).end();
       return;
     }
@@ -68,13 +65,9 @@ beforeAll(async () => {
   const asPort = await listen(as);
   asUrl = `http://127.0.0.1:${asPort}`;
 
-  // --- fake protected MCP server: 401 + PRM until the bearer token is presented; 2026-07-28 and 2025 eras ---
-  const factory = () => {
-    const mcp = new McpServer({ name: "protected", version: "0" });
-    mcp.registerTool("whoami", { description: "returns the caller", inputSchema: z.object({ name: z.string().optional() }) }, async (a) => ({ content: [{ type: "text", text: `hello ${a.name ?? "agent"}` }] }));
-    return mcp;
-  };
-  const handler = toNodeHandler(createMcpHandler(factory, { legacy: "stateless", responseMode: "json" }));
+  // --- fake protected MCP server: 401 + PRM until the bearer token is presented ---
+  const mcp = new McpServer({ name: "protected", version: "0" });
+  mcp.registerTool("whoami", { description: "returns the caller", inputSchema: { name: z.string().optional() } }, async (a) => ({ content: [{ type: "text", text: `hello ${a.name ?? "agent"}` }] }));
   rs = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", rsUrl);
     if (url.pathname === "/.well-known/oauth-protected-resource" || url.pathname === "/.well-known/oauth-protected-resource/mcp") {
@@ -86,8 +79,15 @@ beforeAll(async () => {
         res.writeHead(401, { "www-authenticate": `Bearer resource_metadata="${rsUrl}/.well-known/oauth-protected-resource"` });
         return res.end();
       }
-      const body = req.method === "POST" ? JSON.parse(await readBody(req)) : undefined;
-      return handler(req as never, res as never, body);
+      if (req.method !== "POST") {
+        res.writeHead(405).end();
+        return;
+      }
+      const body = JSON.parse(await readBody(req));
+      const transport = new StreamableHTTPServerTransport({ enableJsonResponse: true } as ConstructorParameters<typeof StreamableHTTPServerTransport>[0]);
+      await mcp.connect(transport as never);
+      res.on("close", () => void transport.close());
+      return transport.handleRequest(req, res, body);
     }
     res.writeHead(404).end();
   });
@@ -120,23 +120,23 @@ const connection = (): McpServersConnection => ({
   next_actions: [],
 });
 
-/** Consent that simulates the human: follow the authorization URL, which 302s to the loopback redirect. */
-const autoConsent = (onUrl?: (url: URL) => void) => loopbackConsent({ onAuthorizationUrl: async (url) => { onUrl?.(url); await fetch(url, { redirect: "follow" }); } });
-
 describe("oauth consent flow", () => {
   const store = new MemoryTokenStore();
 
-  it("consents once, then connects on the 2026-07-28 protocol and calls a tool", async () => {
+  it("consents once, then connects and calls a tool", async () => {
     let shown: URL | null = null;
-    const consent = await autoConsent((url) => (shown = url));
-    const client = new Client({ name: "t", version: "0" }, { versionNegotiation: { mode: "auto" } });
+    const consent = await loopbackConsent({
+      onAuthorizationUrl: async (url) => {
+        shown = url;
+        // Simulate the human: follow the authorization URL, which 302s to the loopback redirect.
+        await fetch(url, { redirect: "follow" });
+      },
+    });
+    const client = new Client({ name: "t", version: "0" });
     const transport = await connectClient(client, connection(), {}, { oauth: { store, consent, clientName: "test" } });
     expect(shown).not.toBeNull();
     expect(shown!.pathname).toBe("/authorize");
-    expect(client.getProtocolEra()).toBe("modern");
     expect(await hasTokens(store, "test.example/protected")).toBe(true);
-    expect(await store.get("test.example/protected:discovery")).toBeTruthy();
-    expect(await store.get("test.example/protected:state")).toBeUndefined(); // used once
     const out = await client.callTool({ name: "whoami", arguments: { name: "bot" } });
     expect((out.content as { text: string }[])[0]!.text).toBe("hello bot");
     await transport.close();
@@ -145,12 +145,11 @@ describe("oauth consent flow", () => {
     expect(asLog.filter((l) => l === "POST /token")).toHaveLength(1);
   });
 
-  it("reconnects with stored tokens and no human step, on the 2025 protocol too", async () => {
+  it("reconnects with stored tokens and no human step", async () => {
     let asked = 0;
     const consent = await loopbackConsent({ onAuthorizationUrl: () => { asked++; } });
     const client = new Client({ name: "t2", version: "0" });
     const transport = await connectClient(client, connection(), {}, { oauth: { store, consent } });
-    expect(client.getProtocolEra()).toBe("legacy");
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual(["whoami"]);
     expect(asked).toBe(0);
@@ -162,8 +161,8 @@ describe("oauth consent flow", () => {
     redirectMode = mode;
     const fresh = new MemoryTokenStore();
     const tokenPosts = asLog.filter((l) => l === "POST /token").length;
-    const consent = await autoConsent();
-    const client = new Client({ name: "t3", version: "0" }, { versionNegotiation: { mode: "auto" } });
+    const consent = await loopbackConsent({ onAuthorizationUrl: async (url) => void (await fetch(url, { redirect: "follow" })) });
+    const client = new Client({ name: "t3", version: "0" });
     const err = await connectClient(client, connection(), {}, { oauth: { store: fresh, consent } }).then(() => null, (e: unknown) => e);
     await consent.close?.();
     expect(asLog.filter((l) => l === "POST /token").length).toBe(tokenPosts); // no code was exchanged
@@ -175,34 +174,29 @@ describe("oauth consent flow", () => {
     expect((await refused("foreign-state")).message).toMatch(/state does not match/);
   });
 
-  it("refuses a redirect from another issuer (RFC 9207)", async () => {
-    expect(await refused("foreign-iss")).toBeInstanceOf(IssuerMismatchError);
-  });
-
   it("reports a denied consent by its error code only", async () => {
-    const err = await refused("error");
-    expect(err.message).toBe("authorization was not granted (access_denied)");
+    expect((await refused("error")).message).toBe("authorization was not granted (access_denied)");
   });
 
   it("saves the authorization server as issuer with the tokens and the client", async () => {
-    expect((await store.get("test.example/protected:tokens")) as { issuer?: string }).toMatchObject({ issuer: asUrl });
-    expect((await store.get("test.example/protected:client")) as { issuer?: string }).toMatchObject({ issuer: asUrl });
+    const issuer = expect.stringMatching(new RegExp(`^${asUrl}/?$`));
+    expect(await store.get("test.example/protected:tokens")).toMatchObject({ issuer });
+    expect(await store.get("test.example/protected:client")).toMatchObject({ issuer });
   });
 
   it("ignores credentials saved without an issuer and asks for consent again (GHSA-6qxp-vccf-f47h)", async () => {
-    // What an earlier MCP SDK saved: valid tokens and client, with no record of the server that issued them.
+    // What MCP SDKs before 1.31.0 saved: valid tokens and client, with no record of the server that issued them.
     const old = new MemoryTokenStore();
     await old.set("test.example/protected:tokens", { access_token: ACCESS, token_type: "Bearer", refresh_token: "refresh-1" });
     await old.set("test.example/protected:client", { client_id: "client-123" });
     expect(await hasTokens(old, "test.example/protected")).toBe(false);
     let asked = 0;
-    const consent = await autoConsent(() => { asked++; });
+    const consent = await loopbackConsent({ onAuthorizationUrl: async (url) => { asked++; await fetch(url, { redirect: "follow" }); } });
     const registrations = asLog.filter((l) => l === "POST /register").length;
-    const client = new Client({ name: "t4", version: "0" }, { versionNegotiation: { mode: "auto" } });
+    const client = new Client({ name: "t4", version: "0" });
     const transport = await connectClient(client, connection(), {}, { oauth: { store: old, consent } });
     expect(asked).toBe(1);
     expect(asLog.filter((l) => l === "POST /register").length).toBe(registrations + 1);
-    expect((await old.get("test.example/protected:tokens")) as { issuer?: string }).toMatchObject({ issuer: asUrl });
     expect(await hasTokens(old, "test.example/protected")).toBe(true);
     await transport.close();
     await consent.close?.();
@@ -223,19 +217,6 @@ describe("oauth consent flow", () => {
     const found = await findConnectable(registry, { q: "x" }, { tokenStore: store });
     expect(found?.result.name).toBe("test.example/protected");
     expect(await findConnectable(registry, { q: "x" }, { tokenStore: new MemoryTokenStore() })).toBeNull();
-  });
-});
-
-describe("manualConsent", () => {
-  it("reads code, state and iss from the pasted redirect URL", async () => {
-    const consent = manualConsent({ redirectUrl: "http://127.0.0.1:8765/callback", onAuthorizationUrl: () => {}, waitForRedirect: async () => " http://127.0.0.1:8765/callback?code=c1&state=s1&iss=https%3A%2F%2Fas.example \n" });
-    const params = await consent.waitForCallback();
-    expect([params.get("code"), params.get("state"), params.get("iss")]).toEqual(["c1", "s1", "https://as.example"]);
-  });
-
-  it("refuses something that is not a URL", async () => {
-    const consent = manualConsent({ redirectUrl: "http://127.0.0.1:8765/callback", onAuthorizationUrl: () => {}, waitForRedirect: async () => "c1" });
-    await expect(consent.waitForCallback()).rejects.toThrow(/full URL/);
   });
 });
 

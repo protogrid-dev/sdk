@@ -5,11 +5,11 @@ block, and connect with no human in the loop wherever the server allows it.
 
 ```ts
 import { createClient, createTransport, findConnectable } from "@protogrid/sdk";
-import { Client } from "@modelcontextprotocol/client";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 
 const registry = createClient(); // public registry; { baseUrl: "http://localhost:8080" } for a local stack
 const found = await findConnectable(registry, { q: "send an email" }, { secrets: process.env });
-const mcp = new Client({ name: "my-agent", version: "1.0.0" }, { versionNegotiation: { mode: "auto" } }); // 2026-07-28 or 2025 servers
+const mcp = new Client({ name: "my-agent", version: "1.0.0" });
 await mcp.connect(await createTransport(found!.connection, process.env));
 ```
 
@@ -20,15 +20,14 @@ await mcp.connect(await createTransport(found!.connection, process.env));
   The registry never sees secret values.
 - `connection_class`: **R0** remote, no auth · **R1** remote, static secret you hold · **R2** remote
   OAuth (one consent) · **L0** local package (runs on your machine, `allowLocal`) · `unknown`.
-- `@modelcontextprotocol/client` 2.x (the official MCP client SDK v2) is an optional peer dependency, needed for
-  `createTransport`, `connectClient` and OAuth. Still on the v1 package `@modelcontextprotocol/sdk`? Use `@protogrid/sdk`
-  0.4.x until you move; a transport must come from the same package as your `Client`. Differences and the upgrade steps:
-  https://docs.protogrid.dev/sdk/typescript/#versions-and-compatibility
+- `@modelcontextprotocol/sdk` 1.31.0 or later (v1) is an optional peer dependency, needed for `createTransport`,
+  `connectClient` and OAuth; earlier versions can send stored OAuth credentials to an authorization server the MCP server
+  chooses (GHSA-6qxp-vccf-f47h). This is the 0.4 line for the v1 client (`pnpm add @protogrid/sdk@mcp-client-v1`); new code
+  should use 0.5 with `@modelcontextprotocol/client`: https://docs.protogrid.dev/sdk/typescript/#versions-and-compatibility
 - R2 (OAuth) servers: `connectClient(client, conn, secrets, { oauth: { store, consent } })` runs the one-time consent
-  (`loopbackConsent` or `manualConsent`) and keeps tokens in your `TokenStore`; later runs need no human. The redirect's
-  `state` and issuer are checked before any code is exchanged. Stored tokens and client information that do not name the
-  authorization server that issued them (`issuer`, as saved by MCP SDKs before GHSA-6qxp-vccf-f47h was fixed) are ignored,
-  so the agent signs in once more (0.5.1).
+  (`loopbackConsent` or `manualConsent`) and keeps tokens in your `TokenStore`; later runs need no human. Stored tokens and
+  client information that do not name the authorization server that issued them (`issuer`, as saved before 1.31.0) are
+  ignored, so the agent signs in once more (0.4.2).
 - `toClaudeAgentSdk` / `toRawTransport` are pure formatters for the Claude Agent SDK and hand-built transports.
 - Trust scores derive from observable signals only; no code audit is implied.
 

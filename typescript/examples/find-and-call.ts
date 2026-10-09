@@ -5,7 +5,7 @@
  * The second argument (optional) fills required string parameters of the chosen tool.
  * Secrets for R1 servers come from the environment: any `${NAME}` placeholder is read from process.env.NAME.
  */
-import { Client } from "@modelcontextprotocol/client";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { createClient, createTransport, findConnectable } from "../src/index.js";
 
 const registry = createClient(process.env.REGISTRY_URL ? { baseUrl: process.env.REGISTRY_URL } : {});
@@ -21,7 +21,7 @@ const { result, connection } = found;
 console.log(`→ ${result.name} (${result.connection_class}, trust ${result.trust_score}); matched: ${result.matched_tools.map((t) => t.name).join(", ") || "server text"}`);
 
 const transport = await createTransport(connection, process.env);
-const mcp = new Client({ name: "protogrid-example", version: "0.1.0" }, { versionNegotiation: { mode: "auto" } });
+const mcp = new Client({ name: "protogrid-example", version: "0.1.0" });
 await mcp.connect(transport);
 const { tools } = await mcp.listTools();
 console.log(`connected; ${tools.length} tools: ${tools.slice(0, 8).map((t) => t.name).join(", ")}${tools.length > 8 ? ", …" : ""}`);

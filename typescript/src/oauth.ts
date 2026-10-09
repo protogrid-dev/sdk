@@ -8,7 +8,8 @@
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import { randomBytes } from "node:crypto";
-import type { OAuthClientMetadata, OAuthClientProvider, OAuthDiscoveryState, StoredOAuthClientInformation, StoredOAuthTokens } from "@modelcontextprotocol/client";
+import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
+import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 
 // ---------- token store ----------
 
@@ -36,10 +37,7 @@ export class MemoryTokenStore implements TokenStore {
   }
 }
 
-/**
- * One JSON file, mode 0600, refresh tokens in plain text. Fine for a single agent process on a machine
- * you control; use an encrypted store (OS keychain, KMS) anywhere else.
- */
+/** One JSON file, mode 0600. Fine for a single agent process; not for shared hosts. */
 export class FileTokenStore implements TokenStore {
   constructor(private readonly path: string) {}
   private async read(): Promise<Record<string, unknown>> {
@@ -69,8 +67,8 @@ export class FileTokenStore implements TokenStore {
 
 /**
  * Stored tokens or client information count only when they name the authorization server that issued
- * them. Earlier MCP SDKs saved them without `issuer` and would send them to whichever server an MCP
- * server named (GHSA-6qxp-vccf-f47h), so such values are ignored and the agent signs in once more.
+ * them. MCP SDKs before 1.31.0 saved them without `issuer` and would send them to whichever server an
+ * MCP server named (GHSA-6qxp-vccf-f47h), so such values are ignored and the agent signs in once more.
  */
 function withIssuer<T>(value: unknown): T | undefined {
   const issuer = value && typeof value === "object" ? (value as { issuer?: unknown }).issuer : undefined;
@@ -84,17 +82,19 @@ export async function hasTokens(store: TokenStore, serverName: string): Promise<
 
 // ---------- consent ----------
 
-/** How the one-time consent happens: show the URL, then hand back the redirect's parameters. */
+/** How the one-time consent happens: show the URL, then hand back the authorization code. */
 export interface ConsentHandler {
   /** Redirect URI registered with the authorization server (loopback by default). */
   redirectUrl: string;
   /** Called with the authorization URL the human must open. */
   onAuthorizationUrl(url: URL): void | Promise<void>;
+  /** Resolves with the `code` from the redirect. */
+  waitForCode(opts?: { timeoutMs?: number }): Promise<string>;
   /**
-   * Resolves with the query parameters of the redirect, all of them (`code`, `state`, `iss`, or
-   * `error`): `connectClient` checks `state` and the MCP SDK checks `iss` before the code is exchanged.
+   * Resolves with all the query parameters of the redirect. When present, `connectClient` uses it
+   * instead of `waitForCode` and refuses a redirect whose `state` this flow did not send.
    */
-  waitForCallback(opts?: { timeoutMs?: number }): Promise<URLSearchParams>;
+  waitForCallback?(opts?: { timeoutMs?: number }): Promise<URLSearchParams>;
   close?(): void | Promise<void>;
 }
 
@@ -132,54 +132,43 @@ export async function loopbackConsent(opts: LoopbackOptions = {}): Promise<Conse
   await new Promise<void>((res) => server.listen(opts.port ?? 0, host, res));
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : opts.port;
+  const waitForCallback = ({ timeoutMs = 5 * 60_000 } = {}) => {
+    const t = new Promise<URLSearchParams>((_, rej) => setTimeout(() => rej(new Error("timed out waiting for the authorization redirect")), timeoutMs).unref());
+    return Promise.race([pending, t]);
+  };
   return {
     redirectUrl: `http://${host}:${port}${path}`,
     onAuthorizationUrl: opts.onAuthorizationUrl ?? ((url) => console.error(`Open this URL to authorize:\n${url}`)),
-    waitForCallback: ({ timeoutMs = 5 * 60_000 } = {}) => {
-      const t = new Promise<URLSearchParams>((_, rej) => setTimeout(() => rej(new Error("timed out waiting for the authorization redirect")), timeoutMs).unref());
-      return Promise.race([pending, t]);
-    },
+    waitForCallback,
+    waitForCode: async (o) => codeFrom(await waitForCallback(o)),
     close: () => new Promise<void>((res) => server.close(() => res())),
   };
 }
 
-/**
- * For headless agents: the host relays the authorization URL to a human (a chat, a queue) and hands
- * back the full URL the browser was redirected to, from which `code`, `state` and `iss` are read.
- */
-export function manualConsent(opts: { redirectUrl: string; onAuthorizationUrl: (url: URL) => void | Promise<void>; waitForRedirect: () => Promise<string> }): ConsentHandler {
-  return {
-    redirectUrl: opts.redirectUrl,
-    onAuthorizationUrl: opts.onAuthorizationUrl,
-    waitForCallback: async () => {
-      const raw = (await opts.waitForRedirect()).trim();
-      let url: URL;
-      try {
-        url = new URL(raw);
-      } catch {
-        throw new Error("manualConsent: waitForRedirect must return the full URL the browser was redirected to");
-      }
-      return url.searchParams;
-    },
-  };
+/** The code of a redirect, or why there is none (the error code only, never `error_description`). */
+function codeFrom(params: URLSearchParams): string {
+  const error = params.get("error");
+  if (error != null) throw new Error(`authorization was not granted (${/^[a-z_]{1,64}$/.test(error) ? error : "unknown"})`);
+  const code = params.get("code");
+  if (!code) throw new Error("authorization redirect has no code");
+  return code;
 }
 
 /**
  * Checks the redirect of a consent before its code is used: the `state` must be the one this flow
- * stored for `serverName` (it is used once), and an `error` stops the flow. Only the error code is
- * repeated, never `error_description`: before the issuer check, those values may come from an attacker.
+ * stored for `serverName` (it is used once). Returns the code.
  */
-export async function verifyCallback(store: TokenStore, serverName: string, params: URLSearchParams): Promise<void> {
+export async function verifyCallback(store: TokenStore, serverName: string, params: URLSearchParams): Promise<string> {
   const expected = (await store.get(`${serverName}:state`)) as string | undefined;
   await store.delete(`${serverName}:state`);
   const state = params.get("state");
   if (!expected || !state || state !== expected) throw new Error("authorization redirect refused: its state does not match this flow");
-  const error = params.get("error");
-  if (error != null) {
-    const code = /^[a-z_]{1,64}$/.test(error) ? error : "unknown";
-    throw new Error(`authorization was not granted (${code})`);
-  }
-  if (!params.get("code")) throw new Error("authorization redirect has no code");
+  return codeFrom(params);
+}
+
+/** For headless agents: the host relays the URL and the code (e.g. via a chat or a queue). */
+export function manualConsent(opts: { redirectUrl: string; onAuthorizationUrl: (url: URL) => void | Promise<void>; waitForCode: () => Promise<string> }): ConsentHandler {
+  return { ...opts };
 }
 
 // ---------- provider ----------
@@ -218,13 +207,13 @@ export function createOAuthProvider(serverName: string, opts: OAuthOptions): OAu
       return s;
     },
     async clientInformation() {
-      return withIssuer<StoredOAuthClientInformation>(await store.get(k("client")));
+      return withIssuer<OAuthClientInformationMixed>(await store.get(k("client")));
     },
     async saveClientInformation(info) {
       await store.set(k("client"), info);
     },
     async tokens() {
-      return withIssuer<StoredOAuthTokens>(await store.get(k("tokens")));
+      return withIssuer<OAuthTokens>(await store.get(k("tokens")));
     },
     async saveTokens(tokens) {
       await store.set(k("tokens"), tokens);
@@ -240,15 +229,8 @@ export function createOAuthProvider(serverName: string, opts: OAuthOptions): OAu
       if (!v) throw new Error("no PKCE code verifier saved; start the authorization again");
       return v;
     },
-    // Which authorization server the redirect targeted, so the code is exchanged at the same one.
-    async saveDiscoveryState(state) {
-      await store.set(k("discovery"), state);
-    },
-    async discoveryState() {
-      return (await store.get(k("discovery"))) as OAuthDiscoveryState | undefined;
-    },
     async invalidateCredentials(scope) {
-      const kinds = scope === "all" ? ["client", "tokens", "verifier", "state", "discovery"] : [scope];
+      const kinds = scope === "all" ? ["client", "tokens", "verifier", "state"] : scope === "client" ? ["client"] : scope === "tokens" ? ["tokens"] : scope === "verifier" ? ["verifier"] : [];
       for (const kind of kinds) await store.delete(k(kind));
     },
   };
