@@ -13,7 +13,7 @@ const mcp = new Client({ name: "my-agent", version: "1.0.0" }, { versionNegotiat
 await mcp.connect(await createTransport(found!.connection, process.env));
 ```
 
-- `search`, `getServer`, `listTools`, `getConnection`, `getQuality`, `getChanges`, `getDependencies` mirror the REST API one to one (`search("send an email")` is shorthand for `search({ q: "send an email" })`, and a search without a query rejects with a `TypeError`; search filters by connection class, trust, quality, quality flags such as `known-vulns`, and a verified owner); `check(url)` / `getCheck(id)` run an on-demand check of any remote MCP server URL (quality and Claude and OpenAI directory readiness; `{ fresh: true }` with a key skips the five-minute reuse).
+- `search`, `getServer`, `listTools`, `getConnection`, `getQuality`, `getChanges`, `getDependencies` mirror the REST API one to one (`search("send an email")` is shorthand for `search({ q: "send an email" })`, and a search without a query rejects with a `TypeError`, as does any method given a missing, empty or non-string server name, check id, URL or target; search filters by connection class, trust, quality, quality flags such as `known-vulns`, and a verified owner); `check(url)` / `getCheck(id)` run an on-demand check of any remote MCP server URL (quality and Claude and OpenAI directory readiness; `{ fresh: true }` with a key skips the five-minute reuse).
 - No key needed. A free key from https://protogrid.dev/account raises the limits (60 requests per minute,
   5,000 per day); the client reads `PROTOGRID_API_KEY`, or pass `createClient({ apiKey })`.
 - Connection blocks carry `${NAME}` placeholders; `substituteSecrets` fills them from your own store.

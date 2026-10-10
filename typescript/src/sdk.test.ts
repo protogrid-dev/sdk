@@ -93,6 +93,26 @@ describe("client", () => {
     }
     expect(calls.length).toBe(sent);
   });
+  it("refuses a missing or non-string name, id, URL or target instead of sending one", async () => {
+    const sent = calls.length;
+    const calls_ = (bad: never) => [
+      () => client.getServer(bad),
+      () => client.listTools(bad),
+      () => client.listAllTools(bad),
+      () => client.getQuality(bad),
+      () => client.getChanges(bad),
+      () => client.getDependencies(bad),
+      () => client.getConnection(bad),
+      // an undefined target is the default, mcpServers
+      ...(bad === undefined ? [] : [() => client.getConnection("io.github.acme/acme-mcp", bad)]),
+      () => client.check(bad),
+      () => client.getCheck(bad),
+    ];
+    for (const bad of [undefined, null, "", "  ", { name: "io.github.acme/acme-mcp" }, ["x"], 42]) {
+      for (const call of calls_(bad as never)) await expect(call()).rejects.toThrow(TypeError);
+    }
+    expect(calls.length).toBe(sent);
+  });
   it("reads quality, changes and dependencies", async () => {
     await client.getQuality("io.github.acme/acme-mcp", { days: 30 });
     expect(calls.at(-1)).toBe("http://reg/v1/servers/io.github.acme%2Facme-mcp/quality?days=30|Bearer k");

@@ -71,6 +71,20 @@ export class ProtogridError extends Error {
   }
 }
 
+/**
+ * A rejected promise when an argument is missing, empty or not a string (untyped callers passed objects such as
+ * `getServer({ name })`, which reached the API as `[object Object]`); undefined when every argument is fine.
+ */
+function refuse(method: string, args: Record<string, unknown>): Promise<never> | undefined {
+  for (const [arg, value] of Object.entries(args)) {
+    if (typeof value !== "string" || value.trim() === "") {
+      const got = value === null ? "null" : Array.isArray(value) ? "an array" : typeof value === "string" ? "an empty string" : typeof value;
+      return Promise.reject(new TypeError(`${method} needs ${arg} as a non-empty string, got ${got}`));
+    }
+  }
+  return undefined;
+}
+
 export class ProtogridClient {
   private readonly base: string;
   private readonly fetchImpl: typeof fetch;
@@ -104,10 +118,14 @@ export class ProtogridClient {
   }
 
   getServer(name: string, opts: { schemas?: boolean } = {}): Promise<Descriptor> {
+    const bad = refuse("getServer", { name });
+    if (bad) return bad;
     return this.get(`/v1/servers/${encodeURIComponent(name)}${opts.schemas ? "?schemas=true" : ""}`);
   }
 
   listTools(name: string, opts: { limit?: number; cursor?: string } = {}): Promise<ListToolsResponse> {
+    const bad = refuse("listTools", { name });
+    if (bad) return bad;
     const q = new URLSearchParams();
     if (opts.limit != null) q.set("limit", String(opts.limit));
     if (opts.cursor) q.set("cursor", opts.cursor);
@@ -117,6 +135,8 @@ export class ProtogridClient {
 
   /** Every current tool, following `next_cursor` to the end. */
   async listAllTools(name: string): Promise<ListToolsResponse["tools"]> {
+    const bad = refuse("listAllTools", { name });
+    if (bad) return bad;
     const out: ListToolsResponse["tools"] = [];
     let cursor: string | undefined;
     do {
@@ -129,11 +149,15 @@ export class ProtogridClient {
 
   /** The quality block, the verified owner and the daily score for the last `days` (default 90, up to 400). */
   getQuality(name: string, opts: { days?: number } = {}): Promise<QualityResponse> {
+    const bad = refuse("getQuality", { name });
+    if (bad) return bad;
     return this.get(`/v1/servers/${encodeURIComponent(name)}/quality${opts.days != null ? `?days=${opts.days}` : ""}`);
   }
 
   /** Tool-definition history, newest first; pass `next_before` back as `before` for the next page. */
   getChanges(name: string, opts: { limit?: number; before?: number } = {}): Promise<ChangesResponse> {
+    const bad = refuse("getChanges", { name });
+    if (bad) return bad;
     const q = new URLSearchParams();
     if (opts.limit != null) q.set("limit", String(opts.limit));
     if (opts.before != null) q.set("before", String(opts.before));
@@ -143,6 +167,8 @@ export class ProtogridClient {
 
   /** npm and PyPI packages of the server with their resolved dependency graphs and known advisories. */
   getDependencies(name: string): Promise<DependenciesResponse> {
+    const bad = refuse("getDependencies", { name });
+    if (bad) return bad;
     return this.get(`/v1/servers/${encodeURIComponent(name)}/dependencies`);
   }
 
@@ -150,6 +176,8 @@ export class ProtogridClient {
   getConnection(name: string, target: "mcpServers"): Promise<McpServersConnection>;
   getConnection(name: string, target: ConnectionTarget): Promise<ConnectionResponse>;
   getConnection(name: string, target: ConnectionTarget = "mcpServers"): Promise<ConnectionResponse> {
+    const bad = refuse("getConnection", { name, target });
+    if (bad) return bad;
     return this.get(`/v1/servers/${encodeURIComponent(name)}/connection?target=${encodeURIComponent(target)}`);
   }
 
@@ -163,6 +191,8 @@ export class ProtogridClient {
    * `invalid_url`; an exhausted hourly allowance throws `check_quota_exceeded` with `retryAfterMs`.
    */
   async check(url: string, opts: { waitMs?: number; fresh?: boolean } = {}): Promise<CheckResponse> {
+    const bad = refuse("check", { url });
+    if (bad) return bad;
     const deadline = Date.now() + (opts.waitMs ?? 90_000);
     const waitS = () => Math.max(0, Math.min(MAX_CHECK_WAIT_S, Math.floor((deadline - Date.now()) / 1000)));
     let c = await this.request<CheckResponse>("POST", `/v1/check?wait=${waitS()}`, opts.fresh ? { url, fresh: true } : { url }, waitS());
@@ -172,6 +202,8 @@ export class ProtogridClient {
 
   /** Reads a check; `waitS` (up to 25) holds the request until it finishes. Results are kept 30 days. */
   getCheck(id: string, opts: { waitS?: number } = {}): Promise<CheckResponse> {
+    const bad = refuse("getCheck", { id });
+    if (bad) return bad;
     const wait = Math.max(0, Math.min(MAX_CHECK_WAIT_S, opts.waitS ?? 0));
     return this.request("GET", `/v1/check/${encodeURIComponent(id)}${wait ? `?wait=${wait}` : ""}`, undefined, wait);
   }
