@@ -9,7 +9,7 @@ import time
 
 import httpx
 
-from .types import ChangesResponse, CheckResponse, ConnectionResponse, ConnectionTarget, DependenciesResponse, Descriptor, ListToolsResponse, QualityFlag, QualityResponse, SearchResponse, ToolEntry
+from .types import ChangesResponse, CheckResponse, ConnectionClass, ConnectionResponse, ConnectionTarget, DependenciesResponse, Descriptor, GateResponse, ListToolsResponse, QualityFlag, QualityResponse, SearchResponse, ToolEntry, TrustFlag
 
 
 #: The public registry. Pass ``base_url="http://localhost:8080"`` for a self-hosted or local stack.
@@ -65,6 +65,33 @@ def _search_params(
         p["quality_flags"] = ",".join(quality_flags)
     if exclude_quality_flags:
         p["exclude_quality_flags"] = ",".join(exclude_quality_flags)
+    if owner_verified is not None:
+        p["owner_verified"] = "true" if owner_verified else "false"
+    return p
+
+
+def _gate_params(
+    min_quality: int | None,
+    min_trust: int | None,
+    no_fail: Sequence[str] | None,
+    exclude_quality_flags: Sequence[QualityFlag] | None,
+    exclude_flags: Sequence[TrustFlag] | None,
+    class_: Sequence[ConnectionClass] | None,
+    owner_verified: bool | None,
+) -> dict[str, str]:
+    p: dict[str, str] = {}
+    if min_quality is not None:
+        p["min_quality"] = str(min_quality)
+    if min_trust is not None:
+        p["min_trust"] = str(min_trust)
+    if no_fail:
+        p["no_fail"] = ",".join(no_fail)
+    if exclude_quality_flags:
+        p["exclude_quality_flags"] = ",".join(exclude_quality_flags)
+    if exclude_flags:
+        p["exclude_flags"] = ",".join(exclude_flags)
+    if class_:
+        p["class"] = ",".join(class_)
     if owner_verified is not None:
         p["owner_verified"] = "true" if owner_verified else "false"
     return p
@@ -190,6 +217,22 @@ class ProtogridClient(_Base):
         """Tool-definition history, newest first; pass ``next_before`` back as ``before`` for the next page."""
         return self._get(self._server_path(name, "/changes"), _changes_params(limit, before))
 
+    def gate(
+        self,
+        name: str,
+        *,
+        min_quality: int | None = None,
+        min_trust: int | None = None,
+        no_fail: Sequence[str] | None = None,
+        exclude_quality_flags: Sequence[QualityFlag] | None = None,
+        exclude_flags: Sequence[TrustFlag] | None = None,
+        class_: Sequence[ConnectionClass] | None = None,
+        owner_verified: bool | None = None,
+    ) -> GateResponse:
+        """Pass or fail for one server against your rules, with every broken rule. A failed gate returns ``pass``
+        False; name at least one rule (``no_fail`` takes check ids such as ``tools.hidden_text``)."""
+        return self._get(self._server_path(name, "/gate"), _gate_params(min_quality, min_trust, no_fail, exclude_quality_flags, exclude_flags, class_, owner_verified))
+
     def get_dependencies(self, name: str) -> DependenciesResponse:
         """npm and PyPI packages of the server with their resolved dependency graphs and known advisories."""
         return self._get(self._server_path(name, "/dependencies"))
@@ -297,6 +340,22 @@ class AsyncProtogridClient(_Base):
     async def get_changes(self, name: str, *, limit: int | None = None, before: int | None = None) -> ChangesResponse:
         """Tool-definition history, newest first; pass ``next_before`` back as ``before`` for the next page."""
         return await self._get(self._server_path(name, "/changes"), _changes_params(limit, before))
+
+    async def gate(
+        self,
+        name: str,
+        *,
+        min_quality: int | None = None,
+        min_trust: int | None = None,
+        no_fail: Sequence[str] | None = None,
+        exclude_quality_flags: Sequence[QualityFlag] | None = None,
+        exclude_flags: Sequence[TrustFlag] | None = None,
+        class_: Sequence[ConnectionClass] | None = None,
+        owner_verified: bool | None = None,
+    ) -> GateResponse:
+        """Pass or fail for one server against your rules, with every broken rule. A failed gate returns ``pass``
+        False; name at least one rule (``no_fail`` takes check ids such as ``tools.hidden_text``)."""
+        return await self._get(self._server_path(name, "/gate"), _gate_params(min_quality, min_trust, no_fail, exclude_quality_flags, exclude_flags, class_, owner_verified))
 
     async def get_dependencies(self, name: str) -> DependenciesResponse:
         """npm and PyPI packages of the server with their resolved dependency graphs and known advisories."""

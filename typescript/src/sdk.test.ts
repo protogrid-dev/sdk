@@ -102,6 +102,7 @@ describe("client", () => {
       () => client.getQuality(bad),
       () => client.getChanges(bad),
       () => client.getDependencies(bad),
+      () => client.gate(bad, { min_quality: 80 }),
       () => client.getConnection(bad),
       // an undefined target is the default, mcpServers
       ...(bad === undefined ? [] : [() => client.getConnection("io.github.acme/acme-mcp", bad)]),
@@ -122,6 +123,10 @@ describe("client", () => {
     expect(calls.at(-1)).toBe("http://reg/v1/servers/io.github.acme%2Facme-mcp/changes?limit=10&before=1234|Bearer k");
     await client.getDependencies("io.github.acme/acme-mcp");
     expect(calls.at(-1)).toBe("http://reg/v1/servers/io.github.acme%2Facme-mcp/dependencies|Bearer k");
+  });
+  it("sends a gate's rules", async () => {
+    await client.gate("io.github.acme/acme-mcp", { min_quality: 80, no_fail: ["tools.hidden_text", "stability.rug_pull"], exclude_quality_flags: ["hidden-text"], class: ["R0", "R1"], owner_verified: true });
+    expect(calls.at(-1)).toBe("http://reg/v1/servers/io.github.acme%2Facme-mcp/gate?min_quality=80&no_fail=tools.hidden_text%2Cstability.rug_pull&exclude_quality_flags=hidden-text&class=R0%2CR1&owner_verified=true|Bearer k");
   });
   it("maps errors", async () => {
     await expect(client.getServer("nothing")).rejects.toMatchObject({ status: 404, code: "not_found" });

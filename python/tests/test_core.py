@@ -195,6 +195,8 @@ def test_search_quality_and_owner_filters_and_read_methods():
     assert seen[-1] == "http://reg/v1/servers/io.github.acme%2Facme-mcp/changes?limit=10&before=1234"
     c.get_dependencies("io.github.acme/acme-mcp")
     assert seen[-1] == "http://reg/v1/servers/io.github.acme%2Facme-mcp/dependencies"
+    c.gate("io.github.acme/acme-mcp", min_quality=80, no_fail=["tools.hidden_text"], exclude_quality_flags=["hidden-text"], class_=["R0"], owner_verified=True)
+    assert seen[-1] == "http://reg/v1/servers/io.github.acme%2Facme-mcp/gate?min_quality=80&no_fail=tools.hidden_text&exclude_quality_flags=hidden-text&class=R0&owner_verified=true"
 
 
 def test_fresh_check_only_when_asked_sync_and_async():

@@ -8,7 +8,7 @@ export type AuthType = "none" | "api_key" | "oauth2" | "unknown";
 export type RemoteTransport = "streamable-http" | "sse";
 export type ConnectionTarget = "mcpServers" | "vscode" | "cursor" | "claude-code-cli" | "codex-toml" | "opencode" | "gemini" | "goose";
 /** Raised when a dependency check fails (never on a warning). No flag is not "no vulnerabilities": remote-only servers publish no package. */
-export type QualityFlag = "known-vulns" | "outdated-mcp-sdk";
+export type QualityFlag = "known-vulns" | "outdated-mcp-sdk" | "hidden-text";
 export type TrustFlag = "multi-version-spam" | "duplicate-repo" | "no-repository" | "no-connection" | "deprecated" | "unreachable" | "blocked" | "deleted";
 
 /** Reverse-DNS namespace of protogrid.dev under `_meta`. */
@@ -344,11 +344,43 @@ export interface ToolChange {
   description_after: string | null;
   /** Word overlap of the two descriptions (0-1); low values mean the meaning may have changed. */
   description_similarity: number | null;
+  /** Sites this change named that the server never named before. */
+  new_links: string[];
   before_hash: string | null;
   after_hash: string | null;
 }
 
 /** `GET /v1/servers/{name}/changes`: tool-definition history, newest first. */
+/** Rules for `gate`: name at least one. */
+export interface GateRules {
+  min_quality?: number;
+  min_trust?: number;
+  /** Check ids that must not fail, e.g. `tools.hidden_text`; unknown ids are refused. */
+  no_fail?: string[];
+  exclude_quality_flags?: QualityFlag[];
+  exclude_flags?: TrustFlag[];
+  /** Connection classes allowed. */
+  class?: ConnectionClass[];
+  owner_verified?: boolean;
+}
+
+export type GateRule = "listing" | "min_quality" | "min_trust" | "no_fail" | "exclude_quality_flags" | "exclude_flags" | "class" | "owner_verified";
+
+export interface GateResponse {
+  server: string;
+  /** False when any rule broke; a blocked or deleted listing never passes. */
+  pass: boolean;
+  failed: { rule: GateRule; detail: string }[];
+  rules: GateRules;
+  quality: { score: number | null; label: string; flags: QualityFlag[]; computed_at: string | null };
+  trust: { score: number | null; flags: TrustFlag[] };
+  class: ConnectionClass;
+  owner_verified: boolean;
+  /** Pin it to notice when the tools change after the gate passed. */
+  tools_hash: string | null;
+  next_actions: NextAction[];
+}
+
 export interface ChangesResponse {
   server: string;
   count: number;

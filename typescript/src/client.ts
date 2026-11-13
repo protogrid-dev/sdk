@@ -7,6 +7,8 @@ import type {
   DependenciesResponse,
   Descriptor,
   ErrorBody,
+  GateResponse,
+  GateRules,
   ListToolsResponse,
   McpServersConnection,
   QualityFlag,
@@ -163,6 +165,25 @@ export class ProtogridClient {
     if (opts.before != null) q.set("before", String(opts.before));
     const qs = q.toString();
     return this.get(`/v1/servers/${encodeURIComponent(name)}/changes${qs ? `?${qs}` : ""}`);
+  }
+
+  /**
+   * Pass or fail for one server against your rules, with every broken rule. A failed gate resolves
+   * with `pass: false`; name at least one rule.
+   */
+  gate(name: string, rules: GateRules): Promise<GateResponse> {
+    const bad = refuse("gate", { name });
+    if (bad) return bad;
+    const q = new URLSearchParams();
+    if (rules.min_quality != null) q.set("min_quality", String(rules.min_quality));
+    if (rules.min_trust != null) q.set("min_trust", String(rules.min_trust));
+    if (rules.no_fail?.length) q.set("no_fail", rules.no_fail.join(","));
+    if (rules.exclude_quality_flags?.length) q.set("exclude_quality_flags", rules.exclude_quality_flags.join(","));
+    if (rules.exclude_flags?.length) q.set("exclude_flags", rules.exclude_flags.join(","));
+    if (rules.class?.length) q.set("class", rules.class.join(","));
+    if (rules.owner_verified != null) q.set("owner_verified", String(rules.owner_verified));
+    const qs = q.toString();
+    return this.get(`/v1/servers/${encodeURIComponent(name)}/gate${qs ? `?${qs}` : ""}`);
   }
 
   /** npm and PyPI packages of the server with their resolved dependency graphs and known advisories. */

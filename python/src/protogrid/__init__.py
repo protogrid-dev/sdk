@@ -17,6 +17,7 @@ from .types import (
     DependencyPackage,
     Descriptor,
     DirectoryReadiness,
+    GateResponse,
     ListToolsResponse,
     Quality,
     QualityCheck,
@@ -36,6 +37,6 @@ __all__ = [
     "ConsentHandler", "FileTokenStore", "MemoryTokenStore", "TokenStore", "has_tokens", "loopback_consent", "manual_consent", "oauth_provider",
     "MissingSecretsError", "placeholders_in", "substitute_secrets",
     "META_NS", "CheckResponse", "CheckResult", "DirectoryReadiness", "ReadinessItem", "ConnectionClass", "ConnectionResponse", "ConnectionTarget", "Descriptor", "ListToolsResponse", "SearchResponse", "SearchResult", "TrustFlag",
-    "QualityFlag", "Quality", "QualityCheck", "QualityResponse", "ChangesResponse", "ToolChange", "DependenciesResponse", "DependencyPackage", "DependencyAdvisory",
+    "QualityFlag", "Quality", "QualityCheck", "QualityResponse", "ChangesResponse", "ToolChange", "GateResponse", "DependenciesResponse", "DependencyPackage", "DependencyAdvisory",
 ]
-__version__ = "0.4.2"
+__version__ = "0.4.3"

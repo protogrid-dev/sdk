@@ -12,7 +12,7 @@ AuthType = Literal["none", "api_key", "oauth2", "unknown"]
 ConnectionTarget = Literal["mcpServers", "vscode", "cursor", "claude-code-cli", "codex-toml", "opencode", "gemini", "goose"]
 #: Raised when a dependency check fails (never on a warning). No flag is not "no vulnerabilities":
 #: remote-only servers publish no package.
-QualityFlag = Literal["known-vulns", "outdated-mcp-sdk"]
+QualityFlag = Literal["known-vulns", "outdated-mcp-sdk", "hidden-text"]
 TrustFlag = Literal["multi-version-spam", "duplicate-repo", "no-repository", "no-connection", "deprecated", "unreachable", "blocked", "deleted"]
 
 #: Reverse-DNS namespace of protogrid.dev under ``_meta``.
@@ -241,8 +241,37 @@ class ToolChange(TypedDict):
     description_after: str | None
     #: Word overlap of the two descriptions (0-1); low values mean the meaning may have changed.
     description_similarity: float | None
+    #: Sites this change named that the server never named before.
+    new_links: list[str]
     before_hash: str | None
     after_hash: str | None
+
+
+GateRule = Literal["listing", "min_quality", "min_trust", "no_fail", "exclude_quality_flags", "exclude_flags", "class", "owner_verified"]
+
+
+class GateFailure(TypedDict):
+    rule: GateRule
+    detail: str
+
+
+#: ``pass`` and ``class`` are Python keywords, hence the functional form. ``pass`` is False when any rule broke; a
+#: blocked or deleted listing never passes. Pin ``tools_hash`` to notice when the tools change after the gate passed.
+GateResponse = TypedDict(
+    "GateResponse",
+    {
+        "server": str,
+        "pass": bool,
+        "failed": "list[GateFailure]",
+        "rules": "dict[str, Any]",
+        "quality": "dict[str, Any]",
+        "trust": "dict[str, Any]",
+        "class": "ConnectionClass",
+        "owner_verified": bool,
+        "tools_hash": "str | None",
+        "next_actions": "list[NextAction]",
+    },
+)
 
 
 class ChangesResponse(TypedDict):
