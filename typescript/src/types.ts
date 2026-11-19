@@ -8,7 +8,7 @@ export type AuthType = "none" | "api_key" | "oauth2" | "unknown";
 export type RemoteTransport = "streamable-http" | "sse";
 export type ConnectionTarget = "mcpServers" | "vscode" | "cursor" | "claude-code-cli" | "codex-toml" | "opencode" | "gemini" | "goose";
 /** Raised when a dependency check fails (never on a warning). No flag is not "no vulnerabilities": remote-only servers publish no package. */
-export type QualityFlag = "known-vulns" | "outdated-mcp-sdk" | "hidden-text";
+export type QualityFlag = "known-vulns" | "outdated-mcp-sdk" | "hidden-text" | "tool-poisoning";
 export type TrustFlag = "multi-version-spam" | "duplicate-repo" | "no-repository" | "no-connection" | "deprecated" | "unreachable" | "blocked" | "deleted";
 
 /** Reverse-DNS namespace of protogrid.dev under `_meta`. */
@@ -79,7 +79,7 @@ export interface DescriptorRemote {
   headers: DescriptorHeader[];
   auth: { type: AuthType; location: { header: string; scheme?: string } | null; secret_name: string | null; oauth: OAuthMetadata | null };
   protocol: { supported_versions: string[]; stateless: boolean | null };
-  health: { reachable: boolean | null; uptime_30d: number | null; latency_ms_p50: number | null; consecutive_failures: number; last_probe_at: string | null; last_ok_at: string | null };
+  health: { reachable: boolean | null; uptime_30d: number | null; latency_ms_p50: number | null; latency_ms_p95?: number | null; daily_30d?: { date: string; probes: number; answered: number }[]; consecutive_failures: number; last_probe_at: string | null; last_ok_at: string | null };
 }
 
 export interface DescriptorPackage {

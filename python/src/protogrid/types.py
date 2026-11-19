@@ -12,7 +12,7 @@ AuthType = Literal["none", "api_key", "oauth2", "unknown"]
 ConnectionTarget = Literal["mcpServers", "vscode", "cursor", "claude-code-cli", "codex-toml", "opencode", "gemini", "goose"]
 #: Raised when a dependency check fails (never on a warning). No flag is not "no vulnerabilities":
 #: remote-only servers publish no package.
-QualityFlag = Literal["known-vulns", "outdated-mcp-sdk", "hidden-text"]
+QualityFlag = Literal["known-vulns", "outdated-mcp-sdk", "hidden-text", "tool-poisoning"]
 TrustFlag = Literal["multi-version-spam", "duplicate-repo", "no-repository", "no-connection", "deprecated", "unreachable", "blocked", "deleted"]
 
 #: Reverse-DNS namespace of protogrid.dev under ``_meta``.
