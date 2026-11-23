@@ -346,6 +346,10 @@ export interface ToolChange {
   description_similarity: number | null;
   /** Sites this change named that the server never named before. */
   new_links: string[];
+  /** The `serverInfo.version` the server reported with this change; null when it reported none. */
+  server_version: string | null;
+  /** True when neither the reported version nor the registry's latest version moved: the definitions changed without a release. Null when unknown. */
+  silent: boolean | null;
   before_hash: string | null;
   after_hash: string | null;
 }

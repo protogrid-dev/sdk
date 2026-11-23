@@ -243,6 +243,10 @@ class ToolChange(TypedDict):
     description_similarity: float | None
     #: Sites this change named that the server never named before.
     new_links: list[str]
+    #: The ``serverInfo.version`` the server reported with this change; None when it reported none.
+    server_version: str | None
+    #: True when neither the reported version nor the registry's latest version moved; None when unknown.
+    silent: bool | None
     before_hash: str | None
     after_hash: str | None
 

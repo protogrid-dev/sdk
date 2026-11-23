@@ -6,6 +6,7 @@ Clients for [protogrid](https://protogrid.dev), the MCP registry for agents: sea
 |---|---|---|
 | TypeScript `@protogrid/sdk` ([typescript/](typescript/)) | `pnpm add @protogrid/sdk @modelcontextprotocol/client` | [docs.protogrid.dev/sdk/typescript](https://docs.protogrid.dev/sdk/typescript/) |
 | Python `protogrid-sdk` ([python/](python/)) | `uv add "protogrid-sdk[mcp]"` | [docs.protogrid.dev/sdk/python](https://docs.protogrid.dev/sdk/python/) |
+| CLI `protogridctl` ([cli/](cli/)) | `npx protogridctl add <server> --client cursor` | [docs.protogrid.dev/guides/install-cli](https://docs.protogrid.dev/guides/install-cli/) |
 
 Both talk to `https://api.protogrid.dev` by default and to any self-hosted registry by base URL.
 The registry never sees secrets: connection blocks carry `${NAME}` placeholders that the SDKs fill from your own store.

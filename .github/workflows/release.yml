@@ -1,10 +1,11 @@
 # Trusted publishing (OIDC, no long-lived tokens):
 #   tag typescript-vX.Y.Z -> npm @protogrid/sdk   (configure the trusted publisher on npmjs.com: package settings)
 #   tag python-vX.Y.Z     -> PyPI protogrid-sdk   (configure the trusted publisher on pypi.org: owner protogrid-dev, repo sdk, workflow release.yml)
+#   tag cli-vX.Y.Z        -> npm protogridctl     (configure the trusted publisher on npmjs.com: package settings)
 name: release
 on:
   push:
-    tags: ["typescript-v*", "python-v*"]
+    tags: ["typescript-v*", "python-v*", "cli-v*"]
 jobs:
   npm:
     if: startsWith(github.ref_name, 'typescript-v')
@@ -22,6 +23,22 @@ jobs:
         run: test "typescript-v$(node -p 'require("./typescript/package.json").version')" = "${{ github.ref_name }}"
       - run: pnpm --filter @protogrid/sdk run build
       - run: cd typescript && npm publish --provenance --access public
+  cli:
+    if: startsWith(github.ref_name, 'cli-v')
+    runs-on: ubuntu-latest
+    permissions: { id-token: write, contents: read }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, registry-url: "https://registry.npmjs.org" }
+      - run: npm install -g npm@latest
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm test
+      - name: check tag matches package version
+        run: test "cli-v$(node -p 'require("./cli/package.json").version')" = "${{ github.ref_name }}"
+      - run: pnpm --filter protogridctl run build
+      - run: cd cli && npm publish --provenance --access public
   pypi:
     if: startsWith(github.ref_name, 'python-v')
     runs-on: ubuntu-latest
