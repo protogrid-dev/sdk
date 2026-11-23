@@ -2,10 +2,11 @@
 #   tag typescript-vX.Y.Z -> npm @protogrid/sdk   (configure the trusted publisher on npmjs.com: package settings)
 #   tag python-vX.Y.Z     -> PyPI protogrid-sdk   (configure the trusted publisher on pypi.org: owner protogrid-dev, repo sdk, workflow release.yml)
 #   tag cli-vX.Y.Z        -> npm protogridctl     (configure the trusted publisher on npmjs.com: package settings)
+#   tag langchain-vX.Y.Z  -> PyPI langchain-protogrid (trusted publisher on pypi.org: owner protogrid-dev, repo sdk, workflow release.yml)
 name: release
 on:
   push:
-    tags: ["typescript-v*", "python-v*", "cli-v*"]
+    tags: ["typescript-v*", "python-v*", "cli-v*", "langchain-v*"]
 jobs:
   npm:
     if: startsWith(github.ref_name, 'typescript-v')
@@ -50,5 +51,18 @@ jobs:
       - run: uv sync && uv run pytest -q
       - name: check tag matches package version
         run: test "python-v$(uv version --short)" = "${{ github.ref_name }}"
+      - run: uv build
+      - run: uv publish --trusted-publishing always
+  langchain:
+    if: startsWith(github.ref_name, 'langchain-v')
+    runs-on: ubuntu-latest
+    permissions: { id-token: write, contents: read }
+    defaults: { run: { working-directory: langchain } }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv sync && uv run pytest -q
+      - name: check tag matches package version
+        run: test "langchain-v$(uv version --short)" = "${{ github.ref_name }}"
       - run: uv build
       - run: uv publish --trusted-publishing always

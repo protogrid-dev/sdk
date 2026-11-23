@@ -1,0 +1,37 @@
+[project]
+name = "langchain-protogrid"
+version = "0.1.0"
+description = "LangChain tools from the protogrid MCP registry: find MCP servers by what they do, gate them on your rules, and load the tools of the ones that pass."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = ["protogrid-sdk>=0.4.4", "langchain-core>=1.8", "langchain[mcp]>=1.5"]
+keywords = ["langchain", "mcp", "model-context-protocol", "agents", "tools", "registry"]
+
+[project.urls]
+Homepage = "https://protogrid.dev"
+Documentation = "https://docs.protogrid.dev/sdk/langchain/"
+Repository = "https://github.com/protogrid-dev/sdk"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "langchain-tests>=1.1.9,<1.2", "uvicorn>=0.30"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/langchain_protogrid"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+filterwarnings = ["ignore::langchain_core._api.beta_decorator.LangChainBetaWarning"]
+
+[tool.uv]
+package = true
+
+[tool.uv.sources]
+# The SDK next door while developing; the published wheel depends on protogrid-sdk from PyPI.
+protogrid-sdk = { path = "../python", editable = true }

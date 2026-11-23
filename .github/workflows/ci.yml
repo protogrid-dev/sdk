@@ -23,3 +23,11 @@ jobs:
       - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync
       - run: uv run pytest -q
+  langchain:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: langchain } }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv sync
+      - run: uv run pytest -q
