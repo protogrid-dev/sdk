@@ -1,6 +1,6 @@
 {
   "name": "protogridctl",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Add MCP servers to Cursor, VS Code, Claude Code, Claude Desktop, Gemini CLI, Codex, opencode and Goose from the protogrid registry, checked before they are installed.",
   "license": "MIT",
   "type": "module",
@@ -15,9 +15,22 @@
   "engines": {
     "node": ">=20"
   },
-  "keywords": ["mcp", "model-context-protocol", "mcp-server", "cursor", "vscode", "claude", "cli", "installer"],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "cursor",
+    "vscode",
+    "claude",
+    "cli",
+    "installer"
+  ],
   "homepage": "https://docs.protogrid.dev/guides/install-cli/",
-  "repository": { "type": "git", "url": "git+https://github.com/protogrid-dev/sdk.git", "directory": "cli" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/protogrid-dev/sdk.git",
+    "directory": "cli"
+  },
   "scripts": {
     "build": "tsc -b tsconfig.json",
     "typecheck": "tsc -b tsconfig.json",
