@@ -52,7 +52,9 @@ jobs:
       - name: check tag matches package version
         run: test "python-v$(uv version --short)" = "${{ github.ref_name }}"
       - run: uv build
-      - run: uv publish --trusted-publishing always
+      # PyPA's action publishes through trusted publishing and uploads PEP 740 attestations; uv publish does not.
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with: { packages-dir: python/dist }
   langchain:
     if: startsWith(github.ref_name, 'langchain-v')
     runs-on: ubuntu-latest
@@ -65,4 +67,5 @@ jobs:
       - name: check tag matches package version
         run: test "langchain-v$(uv version --short)" = "${{ github.ref_name }}"
       - run: uv build
-      - run: uv publish --trusted-publishing always
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with: { packages-dir: langchain/dist }
