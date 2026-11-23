@@ -1,7 +1,7 @@
 # Trusted publishing (OIDC, no long-lived tokens):
 #   tag typescript-vX.Y.Z -> npm @protogrid/sdk   (configure the trusted publisher on npmjs.com: package settings)
 #   tag python-vX.Y.Z     -> PyPI protogrid-sdk   (configure the trusted publisher on pypi.org: owner protogrid-dev, repo sdk, workflow release.yml)
-#   tag cli-vX.Y.Z        -> npm protogridctl     (configure the trusted publisher on npmjs.com: package settings)
+#   tag cli-vX.Y.Z        -> npm protogridctl     (staged: the trusted publisher may only stage; approve the version on npmjs.com with 2FA)
 #   tag langchain-vX.Y.Z  -> PyPI langchain-protogrid (trusted publisher on pypi.org: owner protogrid-dev, repo sdk, workflow release.yml)
 name: release
 on:
@@ -39,7 +39,7 @@ jobs:
       - name: check tag matches package version
         run: test "cli-v$(node -p 'require("./cli/package.json").version')" = "${{ github.ref_name }}"
       - run: pnpm --filter protogridctl run build
-      - run: cd cli && npm publish --provenance --access public
+      - run: cd cli && npm stage publish --provenance --access public
   pypi:
     if: startsWith(github.ref_name, 'python-v')
     runs-on: ubuntu-latest
