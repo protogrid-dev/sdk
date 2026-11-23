@@ -187,6 +187,10 @@ def test_search_quality_and_owner_filters_and_read_methods():
     assert seen[-1] == "http://reg/v1/search?q=db&min_quality=75&quality_flags=outdated-mcp-sdk&exclude_quality_flags=known-vulns&owner_verified=true"
     c.search("db", owner_verified=False)
     assert seen[-1] == "http://reg/v1/search?q=db&owner_verified=false"
+    c.search("db", paid=False)
+    assert seen[-1] == "http://reg/v1/search?q=db&paid=false"
+    c.gate("io.github.acme/x", paid=False)
+    assert seen[-1] == "http://reg/v1/servers/io.github.acme%2Fx/gate?paid=false"
     c.get_quality("io.github.acme/acme-mcp", days=30)
     assert seen[-1] == "http://reg/v1/servers/io.github.acme%2Facme-mcp/quality?days=30"
     c.get_quality("io.github.acme/acme-mcp")

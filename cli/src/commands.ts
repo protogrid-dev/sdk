@@ -89,6 +89,7 @@ export async function add(name: string, o: AddOptions, d: Deps): Promise<void> {
   }
   d.out(`${gate.server}`);
   d.out(`  quality ${gate.quality.score == null ? "not scored yet" : `${gate.quality.score}${gate.quality.label ? ` (${gate.quality.label})` : ""}`} · trust ${gate.trust.score ?? "-"} · ${gate.class}: ${CLASS_TEXT[gate.class] ?? gate.class} · owner ${gate.owner_verified ? "verified" : "not verified"}`);
+  if (gate.payment) d.out(`  charges per call (${gate.payment === "listed" ? "listed with prices in an x402 Bazaar" : "the server says so"}): your client needs a wallet that pays x402`);
   if (!gate.pass) {
     for (const f of gate.failed) d.out(`  ! ${f.detail}`);
     if (gate.failed.some((f) => HARD_RULES.has(f.rule))) throw new CliError("not installed", 3);

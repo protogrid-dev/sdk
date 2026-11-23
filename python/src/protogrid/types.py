@@ -38,6 +38,8 @@ class _SearchResultOptional(TypedDict, total=False):
     # Quality flags from failing dependency checks, and a verified owner (not an audit; never ranking).
     quality_flags: list[QualityFlag]
     owner_verified: bool
+    # Charges per call: "listed" with prices in an x402 Bazaar, "declared" by the server; None when nothing says so.
+    payment: Literal["listed", "declared"] | None
 
 
 class SearchResult(_SearchResultOptional):
@@ -251,7 +253,7 @@ class ToolChange(TypedDict):
     after_hash: str | None
 
 
-GateRule = Literal["listing", "min_quality", "min_trust", "no_fail", "exclude_quality_flags", "exclude_flags", "class", "owner_verified"]
+GateRule = Literal["listing", "min_quality", "min_trust", "no_fail", "exclude_quality_flags", "exclude_flags", "class", "owner_verified", "paid"]
 
 
 class GateFailure(TypedDict):
@@ -272,6 +274,7 @@ GateResponse = TypedDict(
         "trust": "dict[str, Any]",
         "class": "ConnectionClass",
         "owner_verified": bool,
+        "payment": "Literal['listed', 'declared'] | None",
         "tools_hash": "str | None",
         "next_actions": "list[NextAction]",
     },

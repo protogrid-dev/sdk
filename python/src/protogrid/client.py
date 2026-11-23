@@ -43,6 +43,7 @@ def _search_params(
     quality_flags: Sequence[str] | None = None,
     exclude_quality_flags: Sequence[str] | None = None,
     owner_verified: bool | None = None,
+    paid: bool | None = None,
 ) -> dict[str, str]:
     p: dict[str, str] = {"q": q}
     if limit is not None:
@@ -67,6 +68,8 @@ def _search_params(
         p["exclude_quality_flags"] = ",".join(exclude_quality_flags)
     if owner_verified is not None:
         p["owner_verified"] = "true" if owner_verified else "false"
+    if paid is not None:
+        p["paid"] = "true" if paid else "false"
     return p
 
 
@@ -78,6 +81,7 @@ def _gate_params(
     exclude_flags: Sequence[TrustFlag] | None,
     class_: Sequence[ConnectionClass] | None,
     owner_verified: bool | None,
+    paid: bool | None = None,
 ) -> dict[str, str]:
     p: dict[str, str] = {}
     if min_quality is not None:
@@ -94,6 +98,8 @@ def _gate_params(
         p["class"] = ",".join(class_)
     if owner_verified is not None:
         p["owner_verified"] = "true" if owner_verified else "false"
+    if paid is not None:
+        p["paid"] = "true" if paid else "false"
     return p
 
 
@@ -182,11 +188,12 @@ class ProtogridClient(_Base):
         quality_flags: Sequence[QualityFlag] | None = None,
         exclude_quality_flags: Sequence[QualityFlag] | None = None,
         owner_verified: bool | None = None,
+        paid: bool | None = None,
     ) -> SearchResponse:
         """Searches servers by intent. ``min_quality`` leaves unscored servers out; ``exclude_quality_flags``
         such as ``["known-vulns"]`` drops servers whose dependency checks fail; ``owner_verified=True`` keeps
         servers whose owner proved control of the namespace (not an audit)."""
-        return self._get("/v1/search", _search_params(q, limit, class_, transport, category, min_trust, flags, exclude_flags, min_quality, quality_flags, exclude_quality_flags, owner_verified))
+        return self._get("/v1/search", _search_params(q, limit, class_, transport, category, min_trust, flags, exclude_flags, min_quality, quality_flags, exclude_quality_flags, owner_verified, paid))
 
     def get_server(self, name: str, *, schemas: bool = False) -> Descriptor:
         return self._get(self._server_path(name), {"schemas": "true"} if schemas else None)
@@ -228,10 +235,11 @@ class ProtogridClient(_Base):
         exclude_flags: Sequence[TrustFlag] | None = None,
         class_: Sequence[ConnectionClass] | None = None,
         owner_verified: bool | None = None,
+        paid: bool | None = None,
     ) -> GateResponse:
         """Pass or fail for one server against your rules, with every broken rule. A failed gate returns ``pass``
         False; name at least one rule (``no_fail`` takes check ids such as ``tools.hidden_text``)."""
-        return self._get(self._server_path(name, "/gate"), _gate_params(min_quality, min_trust, no_fail, exclude_quality_flags, exclude_flags, class_, owner_verified))
+        return self._get(self._server_path(name, "/gate"), _gate_params(min_quality, min_trust, no_fail, exclude_quality_flags, exclude_flags, class_, owner_verified, paid))
 
     def get_dependencies(self, name: str) -> DependenciesResponse:
         """npm and PyPI packages of the server with their resolved dependency graphs and known advisories."""
@@ -306,11 +314,12 @@ class AsyncProtogridClient(_Base):
         quality_flags: Sequence[QualityFlag] | None = None,
         exclude_quality_flags: Sequence[QualityFlag] | None = None,
         owner_verified: bool | None = None,
+        paid: bool | None = None,
     ) -> SearchResponse:
         """Searches servers by intent. ``min_quality`` leaves unscored servers out; ``exclude_quality_flags``
         such as ``["known-vulns"]`` drops servers whose dependency checks fail; ``owner_verified=True`` keeps
         servers whose owner proved control of the namespace (not an audit)."""
-        return await self._get("/v1/search", _search_params(q, limit, class_, transport, category, min_trust, flags, exclude_flags, min_quality, quality_flags, exclude_quality_flags, owner_verified))
+        return await self._get("/v1/search", _search_params(q, limit, class_, transport, category, min_trust, flags, exclude_flags, min_quality, quality_flags, exclude_quality_flags, owner_verified, paid))
 
     async def get_server(self, name: str, *, schemas: bool = False) -> Descriptor:
         return await self._get(self._server_path(name), {"schemas": "true"} if schemas else None)
@@ -352,10 +361,11 @@ class AsyncProtogridClient(_Base):
         exclude_flags: Sequence[TrustFlag] | None = None,
         class_: Sequence[ConnectionClass] | None = None,
         owner_verified: bool | None = None,
+        paid: bool | None = None,
     ) -> GateResponse:
         """Pass or fail for one server against your rules, with every broken rule. A failed gate returns ``pass``
         False; name at least one rule (``no_fail`` takes check ids such as ``tools.hidden_text``)."""
-        return await self._get(self._server_path(name, "/gate"), _gate_params(min_quality, min_trust, no_fail, exclude_quality_flags, exclude_flags, class_, owner_verified))
+        return await self._get(self._server_path(name, "/gate"), _gate_params(min_quality, min_trust, no_fail, exclude_quality_flags, exclude_flags, class_, owner_verified, paid))
 
     async def get_dependencies(self, name: str) -> DependenciesResponse:
         """npm and PyPI packages of the server with their resolved dependency graphs and known advisories."""

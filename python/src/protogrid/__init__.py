@@ -39,4 +39,4 @@ __all__ = [
     "META_NS", "CheckResponse", "CheckResult", "DirectoryReadiness", "ReadinessItem", "ConnectionClass", "ConnectionResponse", "ConnectionTarget", "Descriptor", "ListToolsResponse", "SearchResponse", "SearchResult", "TrustFlag",
     "QualityFlag", "Quality", "QualityCheck", "QualityResponse", "ChangesResponse", "ToolChange", "GateResponse", "DependenciesResponse", "DependencyPackage", "DependencyAdvisory",
 ]
-__version__ = "0.4.4"
+__version__ = "0.4.5"

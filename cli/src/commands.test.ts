@@ -112,6 +112,12 @@ describe("add", () => {
     expect(existsSync(path)).toBe(true);
   });
 
+  it("says when a server charges per call", async () => {
+    gate = { ...pass, payment: "listed" };
+    expect(await run("add", "io.github.acme/mail", "--client", "cursor", "--no-prompt")).toBe(0);
+    expect(lines.join("\n")).toContain("charges per call (listed with prices in an x402 Bazaar)");
+  });
+
   it("refuses a score under --min-quality even with --yes", async () => {
     expect(await run("add", "io.github.acme/mail", "--client", "cursor", "--min-quality", "90", "--yes")).toBe(3);
     expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);

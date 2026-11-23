@@ -39,6 +39,8 @@ export interface SearchResult {
   quality_flags?: QualityFlag[];
   /** The owner proved control of the namespace (GitHub sign-in or DNS). Not an audit; never changes ranking. */
   owner_verified?: boolean;
+  /** Charges per call: `listed` with prices in an x402 Bazaar, `declared` by the server; null when nothing says so. */
+  payment?: "listed" | "declared" | null;
   tool_count: number;
   score: number;
   matched_tools: { name: string; description: string }[];
@@ -100,6 +102,8 @@ export interface Connectability {
   preferred: { kind: "remote" | "package"; idx: number } | null;
   remotes: DescriptorRemote[];
   packages: DescriptorPackage[];
+  /** Null when nothing says the server charges per call; never confirmed by a call. */
+  payment?: { per_call: "listed" | "declared"; tools: { name: string; price_usd: number | null; source: "listed" | "declared" }[]; capability: boolean } | null;
 }
 
 export interface DescriptorTool {
@@ -366,9 +370,11 @@ export interface GateRules {
   /** Connection classes allowed. */
   class?: ConnectionClass[];
   owner_verified?: boolean;
+  /** `false` fails a server that charges per call. */
+  paid?: boolean;
 }
 
-export type GateRule = "listing" | "min_quality" | "min_trust" | "no_fail" | "exclude_quality_flags" | "exclude_flags" | "class" | "owner_verified";
+export type GateRule = "listing" | "min_quality" | "min_trust" | "no_fail" | "exclude_quality_flags" | "exclude_flags" | "class" | "owner_verified" | "paid";
 
 export interface GateResponse {
   server: string;
@@ -380,6 +386,7 @@ export interface GateResponse {
   trust: { score: number | null; flags: TrustFlag[] };
   class: ConnectionClass;
   owner_verified: boolean;
+  payment?: "listed" | "declared" | null;
   /** Pin it to notice when the tools change after the gate passed. */
   tools_hash: string | null;
   next_actions: NextAction[];

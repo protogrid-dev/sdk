@@ -22,6 +22,8 @@ export interface Gate {
   trust: { score: number | null; flags: string[] };
   class: string;
   owner_verified: boolean;
+  /** Charges per call: listed with prices in an x402 Bazaar, or declared by the server. */
+  payment?: "listed" | "declared" | null;
 }
 
 export interface SearchResult {

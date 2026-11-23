@@ -57,6 +57,8 @@ export interface SearchParams {
   exclude_quality_flags?: QualityFlag[];
   /** `true` keeps only servers whose owner proved control of the namespace (not an audit). */
   owner_verified?: boolean;
+  /** `false` leaves out servers that charge per call, `true` keeps only them. */
+  paid?: boolean;
 }
 
 export class ProtogridError extends Error {
@@ -116,6 +118,7 @@ export class ProtogridClient {
     if (params.quality_flags?.length) q.set("quality_flags", params.quality_flags.join(","));
     if (params.exclude_quality_flags?.length) q.set("exclude_quality_flags", params.exclude_quality_flags.join(","));
     if (params.owner_verified != null) q.set("owner_verified", String(params.owner_verified));
+    if (params.paid != null) q.set("paid", String(params.paid));
     return this.get(`/v1/search?${q}`);
   }
 
@@ -182,6 +185,7 @@ export class ProtogridClient {
     if (rules.exclude_flags?.length) q.set("exclude_flags", rules.exclude_flags.join(","));
     if (rules.class?.length) q.set("class", rules.class.join(","));
     if (rules.owner_verified != null) q.set("owner_verified", String(rules.owner_verified));
+    if (rules.paid != null) q.set("paid", String(rules.paid));
     const qs = q.toString();
     return this.get(`/v1/servers/${encodeURIComponent(name)}/gate${qs ? `?${qs}` : ""}`);
   }

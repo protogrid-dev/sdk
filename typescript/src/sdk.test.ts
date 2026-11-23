@@ -81,6 +81,8 @@ describe("client", () => {
     expect(calls.at(-1)).toBe("http://reg/v1/search?q=db&min_quality=75&quality_flags=outdated-mcp-sdk&exclude_quality_flags=known-vulns&owner_verified=true|Bearer k");
     await client.search({ q: "db", owner_verified: false });
     expect(calls.at(-1)).toBe("http://reg/v1/search?q=db&owner_verified=false|Bearer k");
+    await client.search({ q: "db", paid: false });
+    expect(calls.at(-1)).toBe("http://reg/v1/search?q=db&paid=false|Bearer k");
   });
   it("takes a plain string as the query", async () => {
     await client.search("send an email");
@@ -127,6 +129,8 @@ describe("client", () => {
   it("sends a gate's rules", async () => {
     await client.gate("io.github.acme/acme-mcp", { min_quality: 80, no_fail: ["tools.hidden_text", "stability.rug_pull"], exclude_quality_flags: ["hidden-text"], class: ["R0", "R1"], owner_verified: true });
     expect(calls.at(-1)).toBe("http://reg/v1/servers/io.github.acme%2Facme-mcp/gate?min_quality=80&no_fail=tools.hidden_text%2Cstability.rug_pull&exclude_quality_flags=hidden-text&class=R0%2CR1&owner_verified=true|Bearer k");
+    await client.gate("io.github.acme/acme-mcp", { paid: false });
+    expect(calls.at(-1)).toBe("http://reg/v1/servers/io.github.acme%2Facme-mcp/gate?paid=false|Bearer k");
   });
   it("maps errors", async () => {
     await expect(client.getServer("nothing")).rejects.toMatchObject({ status: 404, code: "not_found" });
