@@ -1,11 +1,11 @@
 [project]
 name = "langchain-protogrid"
-version = "0.1.0"
+version = "0.1.1"
 description = "LangChain tools from the protogrid MCP registry: find MCP servers by what they do, gate them on your rules, and load the tools of the ones that pass."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
-dependencies = ["protogrid-sdk>=0.4.4", "langchain-core>=1.8", "langchain[mcp]>=1.5"]
+dependencies = ["protogrid-sdk>=0.4.5", "langchain-core>=1.8", "langchain[mcp]>=1.5"]
 keywords = ["langchain", "mcp", "model-context-protocol", "agents", "tools", "registry"]
 
 [project.urls]

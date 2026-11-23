@@ -17,6 +17,8 @@ class Rules:
     exclude_quality_flags: Sequence[str] = ("known-vulns",)
     exclude_flags: Sequence[str] = ()
     owner_verified: bool | None = None
+    #: ``False`` refuses servers that charge per call (x402), which an agent without a wallet cannot use.
+    paid: bool | None = None
     #: Connection classes allowed (R0 nothing to set up, R1 a key you hold, R2 OAuth sign-in). Local packages (L0)
     #: are never loaded: they would run third-party code on your machine.
     classes: Sequence[str] = field(default=("R0", "R1"))
@@ -30,6 +32,7 @@ class Rules:
             "exclude_flags": list(self.exclude_flags) or None,
             "class_": [c for c in self.classes if c != "L0"] or None,
             "owner_verified": self.owner_verified,
+            "paid": self.paid,
         }
 
 

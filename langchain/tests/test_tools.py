@@ -88,6 +88,10 @@ async def test_gate_applies_the_owner_rules_whatever_the_model_asks():
     q = SEEN[-1].url.params
     assert q["min_quality"] == "90" and q["owner_verified"] == "true"
     assert q["no_fail"] == "tools.hidden_text,tools.poisoning" and q["exclude_quality_flags"] == "known-vulns" and q["class"] == "R0,R1"
+    assert "paid" not in q
+    SEEN.clear()
+    await ScriptedGate(rules=Rules(paid=False)).ainvoke({"server": "io.github.acme/mail"})
+    assert SEEN[-1].url.params["paid"] == "false"
 
 
 def test_tool_hashes_match_the_registry():

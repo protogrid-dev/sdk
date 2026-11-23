@@ -100,7 +100,7 @@ async def load_tools(
     reg = registry or AsyncProtogridClient(**{k: v for k, v in {"api_key": api_key, "base_url": base_url}.items() if v is not None}, user_agent="langchain-protogrid")
     tools: list[BaseTool] = []
     try:
-        names = list(servers) if servers is not None else [r["name"] for r in (await reg.search(query or "", limit=candidates, class_=[c for c in rules.classes if c != "L0"]))["results"]]
+        names = list(servers) if servers is not None else [r["name"] for r in (await reg.search(query or "", limit=candidates, class_=[c for c in rules.classes if c != "L0"], paid=rules.paid))["results"]]
         for name in names:
             if len(out.loaded) >= max_servers:
                 break
