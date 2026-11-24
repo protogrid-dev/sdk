@@ -10,6 +10,7 @@ export default defineConfig({
       "cli/src/**/*.test.ts",
       "ai-sdk/src/**/*.test.ts",
       "mastra/src/**/*.test.ts",
+      "langchain-js/src/**/*.test.ts",
     ],
     environment: "node",
   },

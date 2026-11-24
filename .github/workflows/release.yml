@@ -5,11 +5,12 @@
 #   tag langchain-vX.Y.Z  -> PyPI langchain-protogrid (trusted publisher on pypi.org: owner protogrid-dev, repo sdk, workflow release.yml)
 #   tag ai-sdk-vX.Y.Z     -> npm @protogrid/ai-sdk (trusted publisher on npmjs.com: package settings, publish allowed)
 #   tag mastra-vX.Y.Z     -> npm @protogrid/mastra (trusted publisher on npmjs.com: package settings, publish allowed)
+#   tag langchain-js-vX.Y.Z -> npm @protogrid/langchain (trusted publisher on npmjs.com: package settings, publish allowed)
 # The framework packages depend on @protogrid/sdk by version range: publish the SDK release they need first.
 name: release
 on:
   push:
-    tags: ["typescript-v*", "python-v*", "cli-v*", "langchain-v*", "ai-sdk-v*", "mastra-v*"]
+    tags: ["typescript-v*", "python-v*", "cli-v*", "langchain-v*", "ai-sdk-v*", "mastra-v*", "langchain-js-v*"]
 jobs:
   npm:
     if: startsWith(github.ref_name, 'typescript-v')
@@ -79,6 +80,24 @@ jobs:
         run: npm view "@protogrid/sdk@$(node -p 'require("./mastra/package.json").dependencies["@protogrid/sdk"]')" version | grep -q .
       - run: pnpm --filter @protogrid/sdk run build && pnpm --filter @protogrid/mastra run build
       - run: cd mastra && npm publish --provenance --access public
+  langchain-js:
+    if: startsWith(github.ref_name, 'langchain-js-v')
+    runs-on: ubuntu-latest
+    permissions: { id-token: write, contents: read }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, registry-url: "https://registry.npmjs.org" }
+      - run: npm install -g npm@latest
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm test
+      - name: check tag matches package version
+        run: test "langchain-js-v$(node -p 'require("./langchain-js/package.json").version')" = "${{ github.ref_name }}"
+      - name: check the SDK version it needs is on npm
+        run: npm view "@protogrid/sdk@$(node -p 'require("./langchain-js/package.json").dependencies["@protogrid/sdk"]')" version | grep -q .
+      - run: pnpm --filter @protogrid/sdk run build && pnpm --filter @protogrid/langchain run build
+      - run: cd langchain-js && npm publish --provenance --access public
   pypi:
     if: startsWith(github.ref_name, 'python-v')
     runs-on: ubuntu-latest

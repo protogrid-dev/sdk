@@ -3,5 +3,6 @@ packages:
   - cli
   - ai-sdk
   - mastra
+  - langchain-js
 # The framework packages depend on @protogrid/sdk by version; this links the local one while it satisfies the range.
 linkWorkspacePackages: true
