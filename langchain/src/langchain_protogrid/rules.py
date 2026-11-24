@@ -9,7 +9,8 @@ from typing import Any
 @dataclass(frozen=True)
 class Rules:
     """Arguments of protogrid's gate. The defaults refuse what no agent should load: tools that hide text from people,
-    tools holding instructions aimed at the model, and servers depending on a package with a known vulnerability."""
+    tools holding instructions aimed at the model, servers depending on a package with a known vulnerability, and servers
+    that charge per call (x402), which an agent without a wallet cannot use."""
 
     min_quality: int | None = None
     min_trust: int | None = None
@@ -17,8 +18,8 @@ class Rules:
     exclude_quality_flags: Sequence[str] = ("known-vulns",)
     exclude_flags: Sequence[str] = ()
     owner_verified: bool | None = None
-    #: ``False`` refuses servers that charge per call (x402), which an agent without a wallet cannot use.
-    paid: bool | None = None
+    #: ``False`` (the default) refuses servers that charge per call (x402), ``True`` accepts only those, ``None`` both.
+    paid: bool | None = False
     #: Connection classes allowed (R0 nothing to set up, R1 a key you hold, R2 OAuth sign-in). Local packages (L0)
     #: are never loaded: they would run third-party code on your machine.
     classes: Sequence[str] = field(default=("R0", "R1"))

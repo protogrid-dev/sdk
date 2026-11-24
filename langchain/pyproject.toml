@@ -1,6 +1,6 @@
 [project]
 name = "langchain-protogrid"
-version = "0.1.1"
+version = "0.1.2"
 description = "LangChain tools from the protogrid MCP registry: find MCP servers by what they do, gate them on your rules, and load the tools of the ones that pass."
 readme = "README.md"
 license = "MIT"

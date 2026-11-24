@@ -121,14 +121,17 @@ async def test_tries_search_results_in_order_and_stops_at_max_servers(mcp_url):
     assert not any("third" in str(r.url) for r in seen)
     search = next(r for r in seen if r.url.path == "/v1/search")
     assert search.url.params["class"] == "R0,R1" and search.url.params["q"] == "send mail"
-    assert "paid" not in search.url.params
+    assert search.url.params["paid"] == "false"
 
 
-async def test_paid_false_reaches_search_and_the_gate(mcp_url):
+async def test_paid_servers_are_refused_by_default_and_none_accepts_them(mcp_url):
     reg, seen = fake_registry(mcp_url, order=["io.github.acme/mail"])
-    await load_tools("send mail", rules=Rules(paid=False), secrets={"MAIL_TOKEN": TOKEN}, registry=reg)
+    await load_tools("send mail", secrets={"MAIL_TOKEN": TOKEN}, registry=reg)
     assert next(r for r in seen if r.url.path == "/v1/search").url.params["paid"] == "false"
     assert next(r for r in seen if r.url.path.endswith("/gate")).url.params["paid"] == "false"
+    seen.clear()
+    await load_tools("send mail", rules=Rules(paid=None), secrets={"MAIL_TOKEN": TOKEN}, registry=reg)
+    assert all("paid" not in r.url.params for r in seen)
 
 
 async def test_pins_and_strict_tools(mcp_url):

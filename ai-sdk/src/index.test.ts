@@ -1,6 +1,6 @@
 /** @protogrid/ai-sdk end to end: a scripted registry, a real MCP server over HTTP, and generateText with a scripted model. */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { generateText, stepCountIs } from "ai";
+import { generateText, isStepCount } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { createClient, NoServerLoaded } from "@protogrid/sdk";
 import {
@@ -55,7 +55,7 @@ describe("loadTools", () => {
     expect(Object.keys(loaded.tools).sort()).toEqual(["mail_ping", "mail_send"]);
     expect(loaded.origins["mail_send"]).toEqual({ server: "io.github.acme/mail", tool: "send", toolsHash: "h1" });
     const model = callThenAnswer("mail_send", { to: "ops@acme.dev" });
-    const out = await generateText({ model, tools: loaded.tools, prompt: "mail ops", stopWhen: stepCountIs(2) });
+    const out = await generateText({ model, tools: loaded.tools, prompt: "mail ops", stopWhen: isStepCount(2) });
     expect(out.text).toBe("done");
     expect(out.steps[0]!.toolResults[0]!.output).toMatchObject({
       content: [{ type: "text", text: "sent to ops@acme.dev" }],
@@ -128,14 +128,14 @@ describe("searchTool and gateTool", () => {
       model: callThenAnswer("protogrid_search", { query: "send mail" }),
       tools,
       prompt: "find",
-      stopWhen: stepCountIs(2),
+      stopWhen: isStepCount(2),
     });
     expect((s.steps[0]!.toolResults[0]!.output as { name: string }[])[0]!.name).toBe("io.github.acme/mail");
     const g = await generateText({
       model: callThenAnswer("protogrid_gate", { server: "io.github.acme/mail", min_quality: 0 }),
       tools,
       prompt: "check",
-      stopWhen: stepCountIs(2),
+      stopWhen: isStepCount(2),
     });
     expect(g.steps[0]!.toolResults[0]!.output).toMatchObject({ pass: false, failed: ["quality 90 is under 95"] });
     expect(seen.find((r) => r.url.pathname.endsWith("/gate"))!.url.searchParams.get("min_quality")).toBe("95");

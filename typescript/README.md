@@ -31,7 +31,8 @@ await mcp.connect(await createTransport(found!.connection, process.env));
   so the agent signs in once more (0.5.1).
 - `loadServers({ query | servers, rules, secrets, pins, strictTools })` (0.6) connects to up to `maxServers` servers that
   pass your rules through the gate, straight to each server's endpoint, and returns their tools and a `callTool`. The
-  defaults refuse hidden text, tool poisoning and known vulnerabilities, allow R0 and R1, and never load local packages.
+  defaults refuse hidden text, tool poisoning, known vulnerabilities and servers that charge per call (from 0.6.1; `paid: null`
+  accepts them), allow R0 and R1, and never load local packages.
   It is the core of `@protogrid/ai-sdk` and `@protogrid/mastra`; `toolSetHash` computes the gate's `tools_hash` on a live tool list.
 - `toClaudeAgentSdk` / `toRawTransport` are pure formatters for the Claude Agent SDK and hand-built transports.
 - Trust scores derive from observable signals only; no code audit is implied.

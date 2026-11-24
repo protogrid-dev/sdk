@@ -1,6 +1,6 @@
 {
   "name": "@protogrid/langchain",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "LangChain.js tools from the protogrid MCP registry: find MCP servers by what they do, check them against your rules, and give your agent the tools of the ones that pass.",
   "license": "MIT",
   "type": "module",
@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.2.0",
-    "@protogrid/sdk": "^0.6.0"
+    "@protogrid/sdk": "^0.6.1"
   },
   "peerDependencies": {
     "@langchain/core": "^1.5.0"

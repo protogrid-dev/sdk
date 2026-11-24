@@ -14,22 +14,28 @@ import type { ConnectionClass, GateRules, McpServersConnection, QualityFlag, Tru
 /**
  * The rules a server must pass before an agent may use it, set by whoever runs the agent, never by the model. A rule
  * left out keeps its default. The defaults refuse what no agent should load: tools that hide text from people, tools
- * holding instructions aimed at the model, and servers depending on a package with a known vulnerability; and they
- * allow R0 and R1 servers only. Local packages (L0) are never loaded: they would run third-party code on your machine.
+ * holding instructions aimed at the model, servers depending on a package with a known vulnerability, and servers that
+ * charge per call (x402), which an agent without a wallet cannot use; and they allow R0 and R1 servers only. Local
+ * packages (L0) are never loaded: they would run third-party code on your machine.
  */
-export type LoadRules = GateRules;
+export type LoadRules = Omit<GateRules, "paid"> & {
+  /** `false` (the default) refuses servers that charge per call, `true` accepts only those, `null` accepts both. */
+  paid?: boolean | null;
+};
 
 export const DEFAULT_LOAD_RULES: Readonly<{
   no_fail: readonly string[];
   exclude_quality_flags: readonly QualityFlag[];
   class: readonly ConnectionClass[];
+  paid: false;
 }> = Object.freeze({
   no_fail: Object.freeze(["tools.hidden_text", "tools.poisoning"]),
   exclude_quality_flags: Object.freeze(["known-vulns"] as QualityFlag[]),
   class: Object.freeze(["R0", "R1"] as ConnectionClass[]),
+  paid: false,
 });
 
-/** `rules` over the defaults, with L0 taken out of the classes. An empty list switches a default off. */
+/** `rules` over the defaults, with L0 taken out of the classes. An empty list or `paid: null` switches a default off. */
 export function loadRules(rules: LoadRules = {}): GateRules {
   const out: GateRules = {
     no_fail: [...(rules.no_fail ?? DEFAULT_LOAD_RULES.no_fail)],
@@ -40,7 +46,8 @@ export function loadRules(rules: LoadRules = {}): GateRules {
   if (rules.min_trust != null) out.min_trust = rules.min_trust;
   if (rules.exclude_flags?.length) out.exclude_flags = [...rules.exclude_flags];
   if (rules.owner_verified != null) out.owner_verified = rules.owner_verified;
-  if (rules.paid != null) out.paid = rules.paid;
+  const paid = rules.paid === undefined ? DEFAULT_LOAD_RULES.paid : rules.paid;
+  if (paid != null) out.paid = paid;
   for (const k of ["no_fail", "exclude_quality_flags"] as const) if (!out[k]?.length) delete out[k];
   // No class left would mean "any class" to the registry.
   if (!out.class?.length) throw new TypeError("rules.class allows no class that can be loaded (L0 never is)");

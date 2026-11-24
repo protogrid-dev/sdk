@@ -20,7 +20,7 @@ import { dynamicTool, jsonSchema, tool, type JSONSchema7, type Tool, type ToolSe
 
 export { LoadReport, NoServerLoaded, type LoadRules, type Skipped } from "@protogrid/sdk";
 
-const CLIENT = { name: "protogrid-ai-sdk", version: "0.1.0" };
+const CLIENT = { name: "protogrid-ai-sdk", version: "0.1.1" };
 
 export type LoadToolsOptions = Omit<LoadOptions, "clientInfo">;
 

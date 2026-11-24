@@ -60,13 +60,16 @@ describe("rules", () => {
       no_fail: ["tools.hidden_text", "tools.poisoning"],
       exclude_quality_flags: ["known-vulns"],
       class: ["R0", "R1"],
+      paid: false,
     });
-    expect(loadRules({ min_quality: 70, class: ["R0", "R2", "L0"], no_fail: [], paid: false })).toEqual({
+    expect(loadRules({ min_quality: 70, class: ["R0", "R2", "L0"], no_fail: [], paid: true })).toEqual({
       exclude_quality_flags: ["known-vulns"],
       class: ["R0", "R2"],
       min_quality: 70,
-      paid: false,
+      paid: true,
     });
+    // null switches the paid rule off: servers that charge per call and free ones both pass.
+    expect(loadRules({ paid: null })).not.toHaveProperty("paid");
     expect(() => loadRules({ class: ["L0"] })).toThrow(TypeError);
   });
   it("name tools in the characters every model accepts", () => {
@@ -99,6 +102,7 @@ describe("loadServers", () => {
         no_fail: "tools.hidden_text,tools.poisoning",
         exclude_quality_flags: "known-vulns",
         class: "R0,R1",
+        paid: "false",
       });
     } finally {
       await close();
