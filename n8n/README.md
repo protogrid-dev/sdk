@@ -21,7 +21,8 @@ Search and Check Against Rules share the rules:
 
 - **Connection Classes**: R0 (nothing to set up), R1 (needs a key) and R2 (needs a sign-in, which the MCP Client Tool's MCP OAuth2 handles). Local packages are left out: the MCP Client Tool connects to remote servers only.
 - **Exclude Servers Flagged For**: known vulnerabilities, hidden text, tool poisoning (all three by default) and an outdated MCP SDK.
-- **Options**: minimum quality score, minimum trust score, owner verified only, and leaving out servers that charge per call.
+- **Exclude Servers That Charge Per Call**: on by default, since they need an x402 wallet to use.
+- **Options**: minimum quality score, minimum trust score and owner verified only.
 
 As a tool, the rules are the ones you set in the node; the model only fills the fields you hand to it with `$fromAI`.
 

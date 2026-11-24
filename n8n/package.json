@@ -1,6 +1,6 @@
 {
 	"name": "@protogrid/n8n-nodes-protogrid",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "n8n node for the protogrid MCP registry: find MCP servers by what they do, check them against your rules, and get the connection for the MCP Client Tool.",
 	"license": "MIT",
 	"homepage": "https://docs.protogrid.dev/sdk/n8n/",

@@ -72,6 +72,15 @@ const rules = (operation: string): INodeProperties[] => [
 		...show(operation),
 	},
 	{
+		displayName: 'Exclude Servers That Charge Per Call',
+		name: 'excludePaid',
+		type: 'boolean',
+		default: true,
+		description:
+			'Whether to leave out servers that charge per call (x402), which need a wallet to use',
+		...show(operation),
+	},
+	{
 		displayName: 'Options',
 		name: 'options',
 		type: 'collection',
@@ -79,14 +88,6 @@ const rules = (operation: string): INodeProperties[] => [
 		default: {},
 		...show(operation),
 		options: [
-			{
-				displayName: 'Exclude Servers That Charge Per Call',
-				name: 'excludePaid',
-				type: 'boolean',
-				default: true,
-				description:
-					'Whether to leave out servers that charge per call (x402), which need a wallet to use',
-			},
 			{
 				displayName: 'Minimum Quality Score',
 				name: 'minQuality',
@@ -284,13 +285,12 @@ function ruleQuery(ctx: IExecuteFunctions, i: number): IDataObject {
 	if (classes.length) qs.class = classes.join(',');
 	const flags = ctx.getNodeParameter('excludeQualityFlags', i, []) as string[];
 	if (flags.length) qs.exclude_quality_flags = flags.join(',');
+	if (ctx.getNodeParameter('excludePaid', i, true) as boolean) qs.paid = false;
 	const o = ctx.getNodeParameter('options', i, {}) as {
-		excludePaid?: boolean;
 		minQuality?: number;
 		minTrust?: number;
 		ownerVerified?: boolean;
 	};
-	if (o.excludePaid) qs.paid = false;
 	if (o.minQuality !== undefined) qs.min_quality = o.minQuality;
 	if (o.minTrust !== undefined) qs.min_trust = o.minTrust;
 	if (o.ownerVerified) qs.owner_verified = true;

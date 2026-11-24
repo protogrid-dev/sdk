@@ -51,6 +51,7 @@ function run(
 const DEFAULT_RULES = {
 	classes: ['R0', 'R1', 'R2'],
 	excludeQualityFlags: ['known-vulns', 'hidden-text', 'tool-poisoning'],
+	excludePaid: true,
 	options: {},
 };
 
@@ -74,6 +75,7 @@ describe('Search', () => {
 				limit: 2,
 				class: 'R0,R1,R2',
 				exclude_quality_flags: 'known-vulns,hidden-text,tool-poisoning',
+				paid: false,
 			},
 		});
 	});
@@ -87,7 +89,7 @@ describe('Search', () => {
 					limit: 5,
 					classes: [],
 					excludeQualityFlags: [],
-					options: { excludePaid: true, minQuality: 80, minTrust: 60, ownerVerified: true },
+					options: { minQuality: 80, minTrust: 60, ownerVerified: true },
 				},
 			],
 			() => ({ results: [] }),
@@ -103,6 +105,25 @@ describe('Search', () => {
 			min_trust: 60,
 			owner_verified: true,
 		});
+	});
+
+	it('leaves out servers that charge per call unless told not to, also when the parameter is missing', async () => {
+		const { calls, result } = run(
+			[
+				{ operation: 'search', query: 'mail', classes: [], excludeQualityFlags: [] },
+				{
+					operation: 'search',
+					query: 'mail',
+					classes: [],
+					excludeQualityFlags: [],
+					excludePaid: false,
+				},
+			],
+			() => ({ results: [] }),
+		);
+		await result;
+		expect(calls[0]!.req.qs).toMatchObject({ paid: false });
+		expect(calls[1]!.req.qs).not.toHaveProperty('paid');
 	});
 
 	it('refuses an empty query without asking the registry', async () => {
@@ -146,6 +167,7 @@ describe('Check Against Rules', () => {
 					server: 'io.github.a/mail',
 					classes: [],
 					excludeQualityFlags: [],
+					excludePaid: false,
 					options: {},
 				},
 			],
