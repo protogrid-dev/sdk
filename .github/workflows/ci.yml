@@ -15,6 +15,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test
+      # n8n's lint rules for verified community nodes.
+      - run: pnpm --filter @protogrid/n8n-nodes-protogrid run lint
   python:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: python } }

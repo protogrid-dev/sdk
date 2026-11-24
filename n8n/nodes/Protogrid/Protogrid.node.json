@@ -1,0 +1,10 @@
+{
+	"node": "@protogrid/n8n-nodes-protogrid.protogrid",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Development"],
+	"resources": {
+		"credentialDocumentation": [{ "url": "https://docs.protogrid.dev/reference/api-keys/" }],
+		"primaryDocumentation": [{ "url": "https://docs.protogrid.dev/sdk/n8n/" }]
+	}
+}
