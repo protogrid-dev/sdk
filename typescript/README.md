@@ -29,6 +29,10 @@ await mcp.connect(await createTransport(found!.connection, process.env));
   `state` and issuer are checked before any code is exchanged. Stored tokens and client information that do not name the
   authorization server that issued them (`issuer`, as saved by MCP SDKs before GHSA-6qxp-vccf-f47h was fixed) are ignored,
   so the agent signs in once more (0.5.1).
+- `loadServers({ query | servers, rules, secrets, pins, strictTools })` (0.6) connects to up to `maxServers` servers that
+  pass your rules through the gate, straight to each server's endpoint, and returns their tools and a `callTool`. The
+  defaults refuse hidden text, tool poisoning and known vulnerabilities, allow R0 and R1, and never load local packages.
+  It is the core of `@protogrid/ai-sdk` and `@protogrid/mastra`; `toolSetHash` computes the gate's `tools_hash` on a live tool list.
 - `toClaudeAgentSdk` / `toRawTransport` are pure formatters for the Claude Agent SDK and hand-built transports.
 - Trust scores derive from observable signals only; no code audit is implied.
 

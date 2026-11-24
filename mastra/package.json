@@ -1,0 +1,62 @@
+{
+  "name": "@protogrid/mastra",
+  "version": "0.1.0",
+  "description": "Mastra tools from the protogrid MCP registry: find MCP servers by what they do, check them against your rules, and give your agent the tools of the ones that pass.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "^2.2.0",
+    "@protogrid/sdk": "^0.6.0"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.83.0 <2.0.0"
+  },
+  "devDependencies": {
+    "@mastra/core": "^1.85.0",
+    "ai": "^7.0.181",
+    "@modelcontextprotocol/node": "^2.1.0",
+    "@modelcontextprotocol/server": "^2.1.0",
+    "typescript": "^5.9.3",
+    "zod": "^4.6.7"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/protogrid-dev/sdk.git",
+    "directory": "mastra"
+  },
+  "homepage": "https://docs.protogrid.dev/sdk/mastra/",
+  "bugs": {
+    "url": "https://github.com/protogrid-dev/sdk/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mastra",
+    "agents",
+    "tools",
+    "protogrid"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

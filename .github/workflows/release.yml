@@ -3,10 +3,13 @@
 #   tag python-vX.Y.Z     -> PyPI protogrid-sdk   (configure the trusted publisher on pypi.org: owner protogrid-dev, repo sdk, workflow release.yml)
 #   tag cli-vX.Y.Z        -> npm protogridctl     (configure the trusted publisher on npmjs.com: package settings, publish allowed)
 #   tag langchain-vX.Y.Z  -> PyPI langchain-protogrid (trusted publisher on pypi.org: owner protogrid-dev, repo sdk, workflow release.yml)
+#   tag ai-sdk-vX.Y.Z     -> npm @protogrid/ai-sdk (trusted publisher on npmjs.com: package settings, publish allowed)
+#   tag mastra-vX.Y.Z     -> npm @protogrid/mastra (trusted publisher on npmjs.com: package settings, publish allowed)
+# The framework packages depend on @protogrid/sdk by version range: publish the SDK release they need first.
 name: release
 on:
   push:
-    tags: ["typescript-v*", "python-v*", "cli-v*", "langchain-v*"]
+    tags: ["typescript-v*", "python-v*", "cli-v*", "langchain-v*", "ai-sdk-v*", "mastra-v*"]
 jobs:
   npm:
     if: startsWith(github.ref_name, 'typescript-v')
@@ -40,6 +43,42 @@ jobs:
         run: test "cli-v$(node -p 'require("./cli/package.json").version')" = "${{ github.ref_name }}"
       - run: pnpm --filter protogridctl run build
       - run: cd cli && npm publish --provenance --access public
+  ai-sdk:
+    if: startsWith(github.ref_name, 'ai-sdk-v')
+    runs-on: ubuntu-latest
+    permissions: { id-token: write, contents: read }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, registry-url: "https://registry.npmjs.org" }
+      - run: npm install -g npm@latest
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm test
+      - name: check tag matches package version
+        run: test "ai-sdk-v$(node -p 'require("./ai-sdk/package.json").version')" = "${{ github.ref_name }}"
+      - name: check the SDK version it needs is on npm
+        run: npm view "@protogrid/sdk@$(node -p 'require("./ai-sdk/package.json").dependencies["@protogrid/sdk"]')" version | grep -q .
+      - run: pnpm --filter @protogrid/sdk run build && pnpm --filter @protogrid/ai-sdk run build
+      - run: cd ai-sdk && npm publish --provenance --access public
+  mastra:
+    if: startsWith(github.ref_name, 'mastra-v')
+    runs-on: ubuntu-latest
+    permissions: { id-token: write, contents: read }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, registry-url: "https://registry.npmjs.org" }
+      - run: npm install -g npm@latest
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm test
+      - name: check tag matches package version
+        run: test "mastra-v$(node -p 'require("./mastra/package.json").version')" = "${{ github.ref_name }}"
+      - name: check the SDK version it needs is on npm
+        run: npm view "@protogrid/sdk@$(node -p 'require("./mastra/package.json").dependencies["@protogrid/sdk"]')" version | grep -q .
+      - run: pnpm --filter @protogrid/sdk run build && pnpm --filter @protogrid/mastra run build
+      - run: cd mastra && npm publish --provenance --access public
   pypi:
     if: startsWith(github.ref_name, 'python-v')
     runs-on: ubuntu-latest
