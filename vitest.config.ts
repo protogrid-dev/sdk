@@ -11,7 +11,6 @@ export default defineConfig({
       "ai-sdk/src/**/*.test.ts",
       "mastra/src/**/*.test.ts",
       "langchain-js/src/**/*.test.ts",
-      "n8n/test/**/*.test.ts",
     ],
     environment: "node",
   },
